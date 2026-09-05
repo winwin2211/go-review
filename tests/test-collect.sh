@@ -22,10 +22,13 @@ assert_eq "" "$(git -C "$fx/dirty" status --porcelain)" "dirty repo untouched"
 
 # --- clean, worktree mode with an uncommitted change ---
 echo '// touched' >> "$fx/clean/cmd/api/main.go"
+echo 'package clean' > "$fx/clean/root.go"
 bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out/c" --no-tools
 assert_contains "$(cat "$out/c/meta.env")" "MODE=worktree" "worktree mode"
 assert_contains "$(cat "$out/c/changed-go-files.txt")" "cmd/api/main.go" "uncommitted change included"
 assert_contains "$(cat "$out/c/tools/summary.txt")" "UNAVAILABLE(skipped)" "tools skipped"
+assert_eq "example.com/clean" "$(grep -x 'example.com/clean' "$out/c/changed-packages.txt")" "root-level go file yields root package"
+rm "$fx/clean/root.go"
 git -C "$fx/clean" checkout -q -- cmd/api/main.go
 
 # --- not-runnable classification ---
@@ -37,4 +40,19 @@ assert_contains "$(cat "$out/x/classified.txt")" $'example.com/x/internal/ok\tOK
 
 # --- refuses to write inside repo ---
 assert_exit 1 bash "$S/collect.sh" --repo "$fx/dirty" --base main --head WORKTREE --out "$fx/dirty/.review"
+
+# --- repo without go.mod: no-module handling must not abort under pipefail ---
+nomod=$(tmpdir)
+git -C "$nomod" init -q -b main
+git -C "$nomod" config user.email fixture@example.com
+git -C "$nomod" config user.name fixture
+echo "hello" > "$nomod/file.txt"
+git -C "$nomod" add -A && git -C "$nomod" commit -q -m "base"
+git -C "$nomod" checkout -q -b feature/x
+echo "hello again" >> "$nomod/file.txt"
+git -C "$nomod" add -A && git -C "$nomod" commit -q -m "change"
+assert_exit 0 bash "$S/collect.sh" --repo "$nomod" --base main --head feature/x --out "$out/nm"
+assert_eq "MODULE=" "$(grep -x 'MODULE=' "$out/nm/meta.env")" "empty module recorded"
+assert_contains "$(cat "$out/nm/tools/summary.txt")" $'build\tUNAVAILABLE(no-module)' "no-module build summary"
+
 finish

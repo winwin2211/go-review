@@ -38,9 +38,17 @@ mkdir -p "$OUT/tools"
 OUT=$(cd "$OUT" && pwd -P)
 
 if [[ "$HEAD" == "WORKTREE" ]]; then MODE=worktree; HEAD_SHA=$(git -C "$REPO" rev-parse HEAD)
-else MODE=ref; HEAD_SHA=$(git -C "$REPO" rev-parse "$HEAD"); fi
+else
+  MODE=ref; HEAD_SHA=$(git -C "$REPO" rev-parse "$HEAD")
+  actual_head=$(git -C "$REPO" rev-parse HEAD)
+  [[ "$actual_head" == "$HEAD_SHA" ]] || log "checked-out HEAD $actual_head differs from --head $HEAD_SHA; tools run against the checkout"
+fi
 MB=$(merge_base "$REPO" "$BASE" "$HEAD_SHA")
-MODULE=$(cd "$REPO" && go list -m 2>/dev/null | head -1)
+if [[ -f "$REPO/go.mod" ]]; then
+  MODULE=$( (cd "$REPO" && go list -m 2>/dev/null | head -1) || true )
+else
+  MODULE=""
+fi
 {
   echo "REPO=$REPO"; echo "BASE=$BASE"; echo "HEAD=$HEAD"; echo "HEAD_SHA=$HEAD_SHA"
   echo "MERGE_BASE=$MB"; echo "MODE=$MODE"; echo "MODULE=$MODULE"
@@ -68,9 +76,10 @@ awk '/^diff --git/ { intest = ($3 ~ /_test\.go$/) } /^[+-]/ && !/^(\+\+\+|---)/ 
 # --- packages ---
 : > "$OUT/changed-packages.txt"
 if [[ -n "$MODULE" && -s "$OUT/changed-go-files.txt" ]]; then
-  sed 's#/[^/]*$##' "$OUT/changed-go-files.txt" | sort -u | while read -r d; do
+  while read -r f; do dirname "$f"; done < "$OUT/changed-go-files.txt" | sort -u | while read -r d; do
     [[ -d "$REPO/$d" ]] || continue
-    (cd "$REPO" && go list "./$d" 2>/dev/null) || true
+    if [[ "$d" == "." ]]; then p="."; else p="./$d"; fi
+    (cd "$REPO" && go list "$p" 2>/dev/null) || true
   done | sort -u > "$OUT/changed-packages.txt"
 fi
 if [[ $FULL_TESTS -eq 1 ]]; then
