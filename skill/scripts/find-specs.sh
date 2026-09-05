@@ -33,11 +33,11 @@ tickets=$(printf '%s\n%s\n' "$BRANCH" "$TITLE" | grep -oE '[A-Z][A-Z0-9]+-[0-9]+
 btoks=$(printf '%s\n' "$BRANCH" | tr '/_-' '\n\n\n' | grep -vE '^(feature|fix|hotfix|bugfix|release|chore)$' | awk 'length($0) >= 4' | tr 'A-Z' 'a-z' | sort -u || true)
 ttoks=$(printf '%s\n' "$TITLE" | tr -c 'A-Za-z0-9\n' '\n' | awk 'length($0) >= 4' | tr 'A-Z' 'a-z' | grep -vE '^(with|from|that|this|into|when|then|the|and|for)$' | sort -u || true)
 pkgs=""
-[[ -f "$OUT/changed-packages.txt" ]] && pkgs=$(sed 's#.*/##' "$OUT/changed-packages.txt" | sort -u)
+[[ -f "$OUT/changed-packages.txt" ]] && pkgs=$(sed 's#.*/##' "$OUT/changed-packages.txt" | tr 'A-Z' 'a-z' | sort -u)
 logged=""
 if [[ -n "$BASE" ]]; then
   h=HEAD; [[ -n "$HEAD" && "$HEAD" != "WORKTREE" ]] && h=$HEAD
-  logged=$( { git -C "$REPO" log --name-only --format= "$BASE..$h" -- docs openspec 2>/dev/null; [[ "$HEAD" == "WORKTREE" ]] && git -C "$REPO" status --porcelain -- docs openspec | awk '{ print $2 }'; } | sort -u || true)
+  logged=$( { git -C "$REPO" log --name-only --format= "$BASE..$h" -- docs openspec 2>/dev/null; [[ "$HEAD" == "WORKTREE" ]] && git -C "$REPO" status --porcelain --untracked-files=all -- docs openspec | awk '{ print $2 }'; } | sort -u || true)
 fi
 
 : > "$OUT/specs.tsv.unsorted"

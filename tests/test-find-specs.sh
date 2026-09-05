@@ -20,22 +20,38 @@ bash "$S/find-specs.sh" --repo "$fx/dirty" --out "$out/d" --base main --head fea
 assert_eq "" "$(cat "$out/d/specs.tsv")" "no candidates in dirty"
 assert_eq "" "$(cat "$out/d/specs-all.txt")" "no all-candidates in dirty"
 
-# openspec + docs conventions, unmatched candidate still listed in specs-all
-mkdir -p "$fx/dirty/openspec/changes/add-orders/specs/orders" "$fx/dirty/docs/adr"
+# openspec + docs conventions, unmatched candidate still listed in specs-all.
+# The "unrelated" ADR is committed on main and merged into the feature branch
+# before any WORKTREE changes are made, so it is genuinely untouched by this
+# change (clean in git status, absent from the main..HEAD log) -- unlike the
+# openspec files below, which are added straight to the worktree, uncommitted.
+git -C "$fx/dirty" checkout -q main
+mkdir -p "$fx/dirty/docs/adr"
+echo "# Unrelated ADR" > "$fx/dirty/docs/adr/001-logging.md"
+git -C "$fx/dirty" add docs/adr/001-logging.md
+git -C "$fx/dirty" commit -q -m "add unrelated adr"
+git -C "$fx/dirty" checkout -q feature/XBI-100-orders
+git -C "$fx/dirty" merge -q main -m "merge main into feature"
+mkdir -p "$fx/dirty/openspec/changes/add-orders/specs/orders"
 echo "# Proposal: XBI-100 orders" > "$fx/dirty/openspec/changes/add-orders/proposal.md"
 echo "# Tasks" > "$fx/dirty/openspec/changes/add-orders/tasks.md"
 echo "# orders spec" > "$fx/dirty/openspec/changes/add-orders/specs/orders/spec.md"
-echo "# Unrelated ADR" > "$fx/dirty/docs/adr/001-logging.md"
 echo "# readme" > "$fx/dirty/docs/README.md"
 mkdir -p "$out/o"
 bash "$S/find-specs.sh" --repo "$fx/dirty" --out "$out/o" --base main --head WORKTREE --branch feature/XBI-100-orders --title "XBI-100 order listing"
 t=$(cat "$out/o/specs.tsv")
 assert_contains "$t" $'openspec/changes/add-orders/proposal.md\topenspec\t' "openspec proposal matched"
 assert_contains "$t" "title:order" "title signal"
+assert_contains "$t" $'openspec/changes/add-orders/proposal.md\topenspec\tticket:XBI-100,branch:orders,title:order,git-log' "untracked worktree file gets git-log signal"
 assert_not_contains "$t" "docs/adr/001-logging.md" "unrelated adr not matched"
 assert_contains "$(cat "$out/o/specs-all.txt")" "docs/adr/001-logging.md" "unrelated adr listed in all"
 assert_not_contains "$(cat "$out/o/specs-all.txt")" "docs/README.md" "README excluded"
 rm -rf "$fx/dirty/openspec" "$fx/dirty/docs"
+
+# package basenames are lowercased before matching against the (lowercased) doc body
+mkdir -p "$out/p"; echo "example.com/clean/internal/Service" > "$out/p/changed-packages.txt"
+bash "$S/find-specs.sh" --repo "$fx/clean" --out "$out/p"
+assert_contains "$(cat "$out/p/specs.tsv")" "package:service" "package signal lowercased"
 
 # forced
 mkdir -p "$out/f"
