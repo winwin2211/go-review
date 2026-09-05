@@ -12,6 +12,8 @@ done
 [[ -n "$REPO" && -n "$OUT" ]] || die "usage: assert-clean.sh --repo R --out O [--worktree W]"
 if [[ -n "$WT" && -d "$WT" ]]; then
   git -C "$REPO" worktree remove --force "$WT" || rm -rf "$WT"
+fi
+if [[ -n "$WT" ]]; then
   git -C "$REPO" worktree prune
 fi
 rc=0

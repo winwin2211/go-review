@@ -16,4 +16,9 @@ wt="$out/wt"; git -C "$fx/clean" worktree add -q "$wt" main
 bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$wt" >/dev/null
 [[ -d "$wt" ]] && fail "worktree removed" || pass
 n=$(git -C "$fx/clean" worktree list | grep -c "$wt" || true); assert_eq "0" "$n" "worktree pruned"
+
+wt2="$out/wt2"; git -C "$fx/clean" worktree add -q "$wt2" main
+rm -rf "$wt2"
+assert_exit 0 bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$wt2"
+n=$(git -C "$fx/clean" worktree list | grep -c "$wt2" || true); assert_eq "0" "$n" "stale worktree metadata pruned"
 finish
