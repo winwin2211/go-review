@@ -11,11 +11,16 @@ for f in "$SK/SKILL.md" "$SK/references/workflow.md"; do
   done < <(grep -oE '`(references|scripts)/[A-Za-z0-9_./-]+`' "$f" | tr -d '`' | sort -u)
 done
 
-# every `references/x.md` (section "Heading") link in workflow.md must resolve
+# every references/x.md (section(s) "Heading"[, "Heading2", ...]) citation in
+# workflow.md must resolve, with or without backticks around the path, and
+# whether it names one section or several
 while read -r l; do
-  p=$(sed -E 's/`(references[^`]+)`.*/\1/' <<<"$l"); h=$(sed -E 's/.*section "([^"]+)".*/\1/' <<<"$l")
-  grep -q "^## .*$h\$" "$SK/$p" && pass || fail "heading '$h' missing in $p"
-done < <(grep -oE '`references/[a-z-]+\.md` *\(section "[^"]+"\)' "$SK/references/workflow.md")
+  p=$(grep -oE 'references/[a-z-]+\.md' <<<"$l" | head -1)
+  while read -r h; do
+    [[ -z "$h" ]] && continue
+    grep -q "^## .*$h\$" "$SK/$p" && pass || fail "heading '$h' missing in $p"
+  done < <(grep -oE '"[^"]+"' <<<"$l" | tr -d '"')
+done < <(grep -oE '`?references/[a-z-]+\.md`? *\(sections? "[^"]+"(, *"[^"]+")*\)' "$SK/references/workflow.md")
 
 # all six agents are named in the workflow
 for a in correctness security architecture performance sdd-tdd verifier; do

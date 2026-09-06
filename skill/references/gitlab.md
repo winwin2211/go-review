@@ -24,8 +24,9 @@ Check out the head without touching the user's branch:
     git -C "$REPO" fetch origin "$SOURCE_BRANCH"
     git -C "$REPO" worktree add --detach "$WORK/wt" "$HEAD_SHA"
 
-Then run `collect.sh --repo "$WORK/wt" --head "$HEAD_SHA" --base "origin/$TARGET_BRANCH"`.
-If the local branch has the same name as the source branch but a different
+Then run `collect.sh --repo "$WORK/wt" --head "$HEAD_SHA" --base "${BASE:-origin/$TARGET_BRANCH}"`.
+A user-supplied `--base` overrides the MR target branch; otherwise the MR's
+own target branch is used. If the local branch has the same name as the source branch but a different
 sha, warn in the report header: "local <branch> is at <sha>, reviewed MR head
 <sha>". The worktree is removed by `assert-clean.sh --worktree "$WORK/wt"`
 run against the original `$REPO`.

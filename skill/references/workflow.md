@@ -16,17 +16,25 @@ directory (the parent of `references/`).
    - No target: `HEAD=WORKTREE`, `BRANCH=$(git rev-parse --abbrev-ref HEAD)`, `TITLE=""`.
    - Branch name: `HEAD=<branch>`, `BRANCH=<branch>`, `TITLE=""`.
    - MR (`!N`, `N`, or URL): follow `references/gitlab.md` (section "Resolve an MR target").
-     Sets `HEAD=<head sha>`, `BRANCH=<source>`, `TITLE=<mr title>`, `BASE=origin/<target>`,
+     Sets `HEAD=<head sha>`, `BRANCH=<source>`, `TITLE=<mr title>`,
      `REVIEW_REPO=$WORK/wt`. If the MR is merged/closed, print that and go to step 6.
    For non-MR modes `REVIEW_REPO=$REPO`.
+   In every mode, if the user passed `--base`, that value wins: `BASE=<--base value>`.
+   Otherwise: MR mode sets `BASE=origin/<target>`; non-MR modes leave `BASE`
+   empty (`collect.sh` resolves it via `resolve_base` and writes the resolved
+   value to `meta.env`).
 5. From here on, every failure still ends at step 6.
 
 ## 1. Collect evidence
 
 Run `scripts/collect.sh` and then `scripts/find-specs.sh` exactly as shown in
 `references/tooling.md` (section "Commands"). Pass `--no-tools` / `--full-tests`
-/ `--spec` through. Read `$WORK/tools/summary.txt` and `$WORK/meta.env` and
-print a one-line progress message with the tool statuses.
+/ `--spec` / `--base` through: give `collect.sh --base "$BASE"` whenever `BASE`
+is non-empty (omit the flag when it is empty and let `collect.sh` resolve it).
+After `collect.sh` runs, read `BASE=` back out of `$WORK/meta.env` — this is
+now always set, resolved or not — and pass that value as `find-specs.sh --base`
+so the git-log signal always has a base. Read `$WORK/tools/summary.txt` and
+`$WORK/meta.env` and print a one-line progress message with the tool statuses.
 
 Collect project rule files: root `CLAUDE.md`, `CLAUDE.md` in each directory
 listed in `changed-files.txt` (walk up to root), `docs/code-standards/*.md`
@@ -42,7 +50,7 @@ Each prompt contains, verbatim:
 
 ```
 Repo: <REVIEW_REPO>
-Work dir: <WORK>   (read-only for you except nothing: do not write anywhere)
+Work dir: <WORK>   (read only; do not write anywhere, not even here)
 Skill dir: <SKILL>
 Read first: <SKILL>/references/checklist-<dimension>.md, then <SKILL>/references/severity-verdict.md (section "Finding schema").
 Inputs: <WORK>/diff.patch, <WORK>/meta.env, <WORK>/changed-files.txt, <WORK>/changed-packages.txt,
@@ -107,7 +115,11 @@ bash "$SKILL/scripts/assert-clean.sh" --repo "$REPO" --out "$WORK" [--worktree "
 rm -rf "$WORK"
 ```
 
+`rm -rf "$WORK"` always runs, even when `assert-clean.sh` exits 2 — `$WORK` is
+this skill's own scratch directory, not part of the reviewed repo, so removing
+it is always safe.
+
 Print the `No artifacts left: verified` line as the last line of the report.
 If `assert-clean.sh` exits 2, print its output verbatim under a heading
-`ARTIFACTS LEFT` and tell the user which files to remove; do not remove them
-yourself.
+`ARTIFACTS LEFT` and tell the user which files to remove from the reviewed
+repo; do not remove those yourself.
