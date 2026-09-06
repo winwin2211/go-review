@@ -41,8 +41,8 @@ Final no-artifact check (always run, even after errors):
 | `tools/test-classified.txt` | `pkg<TAB>OK|FAIL|NOT_RUNNABLE|NO_TESTS` |
 | `tools/cover.txt` | `go tool cover -func` per function |
 | `tools/vuln.txt` | govulncheck output |
-| `specs.tsv` | matched spec/plan candidates, best first |
-| `specs-all.txt` | every candidate, for the "nearest candidates" hint |
+| `specs.tsv` | matched spec/plan candidates, columns: `path<TAB>convention<TAB>signals`, where convention is `superpowers\|openspec\|docs\|forced` (`forced` when `--spec` was passed) and signals is a comma-separated list from `ticket:<KEY>`, `branch:<token>`, `title:<word>`, `package:<name>`, `git-log`, `forced`; sorted by signal count, best first |
+| `specs-all.txt` | every candidate, one path per line, README excluded, for the "nearest candidates" hint |
 
 Interpretation rules:
 

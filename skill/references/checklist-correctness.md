@@ -42,7 +42,7 @@
 - Loop variable captured by a goroutine or closure on Go < 1.22 (check `go.mod` `go` directive); on >= 1.22 per-iteration semantics apply, do not report.
 - `time.After` inside a hot loop (timer leak until fired); prefer `time.NewTimer` with `Stop`.
 - `sync.Once` / lazy init that can return a partially initialized value on error.
-- `errgroup` used without `WithContext`, or the group's ctx not passed into the workers.
+- `errgroup` used without `WithContext` when workers do cancellable I/O, or the group's ctx not passed into the workers. A plain `errgroup.Group` for CPU-only fan-out with no cancellation need is fine.
 - Ticker/cron/background loops: no exit path on shutdown, no recover, no backoff on repeated failure.
 
 ## Resources and transactions
@@ -68,6 +68,7 @@
 - Comparisons of errors, structs with slices, or `time.Time` with `==`.
 - Switch without `default` on an enum that has since grown; `iota` enums persisted by value with a reordering in the diff.
 - Retry loops with no max attempts or no backoff/jitter; retrying non-idempotent calls; retrying on non-retryable errors (4xx, validation).
+- Generics: type parameter constrained by `any` where the body compares or orders values (needs `comparable`/`cmp.Ordered`); zero value `*new(T)` returned on error paths and indistinguishable from a real value; generic helper that hides an allocation or a copy of a large struct per call.
 
 ## Evidence to cite
 

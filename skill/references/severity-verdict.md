@@ -35,6 +35,7 @@ MAJOR
 
 MINOR
 - Idiom and naming, missing doc comment on exported identifiers, small inefficiencies, log message quality.
+- SDD/TDD minors from `checklist-sdd-tdd.md`.
 
 ## Verifier rubric
 

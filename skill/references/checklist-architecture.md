@@ -4,8 +4,9 @@
 
 1. Read the project rule files passed to you (root `CLAUDE.md`, `CLAUDE.md`
    in touched dirs, `docs/code-standards/**`). Rules there override this
-   checklist; cite the rule file and line in `spec_ref` when a finding comes
-   from them.
+   checklist; put the rule file path plus nearest heading in `spec_ref` as
+   `path#heading` (or just `path` when the file has no headings), and quote
+   the rule text with its line number inside `why`.
 2. Map the repo layout: `ls internal/ pkg/ cmd/` and read one existing file per
    layer to learn the established pattern (how handlers call services, how
    repositories are injected, how errors flow up).
@@ -20,7 +21,9 @@
 Look for and apply, in this order: `CLAUDE.md` sections about architecture,
 layers, naming, error handling, DI; `docs/code-standards/*`; `README.md`
 architecture sections; `.golangci.yml` `depguard`/`gomodguard` settings.
-Quote the rule text in `why`.
+Put the file path plus nearest heading in `spec_ref` as `path#heading` (or
+just `path` when the file has no headings), and quote the rule text with its
+line number inside `why`.
 
 ## Layers and dependencies
 

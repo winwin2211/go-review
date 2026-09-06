@@ -43,7 +43,8 @@ Pre-existing (not blocking)
 No artifacts left: verified
 ```
 
-Tools line rules: `test` shows `N pass` when OK, `N failing` when FAIL;
+Tools line rules: `test` shows `N pass` when OK, `N failing` when FAIL,
+`N no tests` when `tools/test-classified.txt` has `NO_TESTS` packages;
 `race` shows `FAIL` when `tools/test.txt` contains `DATA RACE`; `vuln`
 shows `none`, `N reachable`, or `unavailable`. Any `UNAVAILABLE(reason)`
 shows as `<tool> unavailable (<reason>)`.
@@ -54,7 +55,12 @@ line.
 ## MR summary
 
 `summary.md` is Markdown with the same content, except each finding is one
-bullet `- **B1** <title> — `<file>:<line>`` (the body goes into the inline
-discussion). Start with the Verdict line, then Tools, then the bullets by
-severity, then the SDD/TDD block as a fenced block, then Needs human
-judgment. Do not include "No artifacts left".
+bullet in the following form (the body goes into the inline discussion):
+
+```
+- **B1** <title> — <file>:<line>
+```
+
+Start with the Verdict line, then Tools, then the bullets by severity, then
+the SDD/TDD block as a fenced block, then Needs human judgment. Do not
+include "No artifacts left".

@@ -25,6 +25,7 @@
 - Validation: numeric bounds (qty, amount, page size), string length, enum membership, UUID format; validation done in the handler but bypassed by another entry point (queue consumer, internal gRPC) into the same service method.
 - Mass assignment: binding request bodies directly into DB models (GORM `Save(&model)` from a bound struct) exposing fields like `role`, `balance`, `is_admin`.
 - Integer parsing: `strconv.Atoi` result used as an index or size without bounds.
+- GraphQL: no query depth limit, complexity limit, or batching cap on the public schema; introspection enabled in production builds; resolvers that accept unbounded list arguments.
 
 ## Authentication and authorization
 
@@ -35,6 +36,7 @@
 - JWT: `alg` not pinned, expiry not checked, claims trusted without signature verification, tokens accepted from query strings, refresh token reuse not detected.
 - Session/user id derived from a header that clients can set (`X-User-Id`) on a public path.
 - Rate limiting or lockout missing on login, OTP, password reset, expensive endpoints.
+- CSRF: state-changing endpoint authenticated by cookie/session without a CSRF token or SameSite=Strict/Lax plus origin check; webhook and health endpoints that verify a signature instead of the standard middleware are acceptable and must not be flagged.
 
 ## Secrets and logging
 
