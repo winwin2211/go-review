@@ -16,7 +16,25 @@ while [[ $# -gt 0 ]]; do case "$1" in --method|-X) method=$2; shift 2;; -f|--fie
 case "$method $ep" in
   "GET projects/"*"/merge_requests/7") echo '{"iid":7,"sha":"h1","diff_refs":{"base_sha":"b1","start_sha":"s1","head_sha":"h1"}}' ;;
   "GET projects/"*"/merge_requests/7/changes") echo '{"changes":[{"new_path":"internal/service/order.go"},{"new_path":"go.mod"}]}' ;;
-  "GET projects/"*"/merge_requests/7/notes"*) cat "${FAKE_GLAB_NOTES:-/dev/null}"; [[ -f "${FAKE_GLAB_NOTES:-}" ]] || echo '[]' ;;
+  "GET projects/"*"/merge_requests/7/notes"*)
+    if [[ "${FAKE_GLAB_FAIL_NOTES:-0}" == "1" ]]; then exit 1; fi
+    page=1
+    case "$ep" in *page=*) page=$(printf '%s' "$ep" | sed -n 's/.*page=\([0-9]*\).*/\1/p') ;; esac
+    if [[ -n "${FAKE_GLAB_NOTES_PAGE2:-}" ]]; then
+      if [[ "$page" == "1" ]]; then jq -nc '[range(100) | {id: ., body: "dummy"}]'; else cat "$FAKE_GLAB_NOTES_PAGE2"; fi
+    elif [[ "$page" == "1" ]]; then
+      cat "${FAKE_GLAB_NOTES:-/dev/null}"; [[ -f "${FAKE_GLAB_NOTES:-}" ]] || echo '[]'
+    else
+      echo '[]'
+    fi
+    ;;
+  "POST "*"/discussions")
+    if [[ -n "${FAKE_GLAB_FAIL_DISCUSSION_PATH:-}" ]]; then
+      stdin_body=$(cat)
+      if printf '%s' "$stdin_body" | grep -q "$FAKE_GLAB_FAIL_DISCUSSION_PATH"; then exit 1; fi
+    fi
+    echo '{"id":1}'
+    ;;
   "POST "*) echo '{"id":1}' ;;
   *) echo "unexpected: $method $ep" >&2; exit 1 ;;
 esac
@@ -54,4 +72,35 @@ echo '[{"id":9,"body":"<!-- go-review:h1 -->\nold"}]' > "$w/notes.json"
 out=$(FAKE_GLAB_NOTES="$w/notes.json" bash "$S/gitlab-post.sh" --project group/repo --mr 7 --head-sha h1 --findings "$w/findings.json" --summary "$w/summary.md")
 assert_contains "$out" "already posted for h1" "skips when marker exists"
 assert_eq "0" "$(grep -c POST "$w/calls.log" || true)" "no POST when already posted"
+
+# notes GET failure: refuse to post rather than treating it as "not yet posted"
+: > "$w/calls.log"
+export FAKE_GLAB_FAIL_NOTES=1
+assert_exit 1 bash "$S/gitlab-post.sh" --project group/repo --mr 7 --head-sha h1 --findings "$w/findings.json" --summary "$w/summary.md"
+unset FAKE_GLAB_FAIL_NOTES
+assert_eq "0" "$(grep -c POST "$w/calls.log" || true)" "no POST when notes GET fails"
+
+# notes pagination: marker only on page 2 must still be found
+echo '[{"id":99,"body":"<!-- go-review:h1 -->\nfound on page 2"}]' > "$w/notes-page2.json"
+: > "$w/calls.log"
+out=$(FAKE_GLAB_NOTES_PAGE2="$w/notes-page2.json" bash "$S/gitlab-post.sh" --project group/repo --mr 7 --head-sha h1 --findings "$w/findings.json" --summary "$w/summary.md")
+assert_contains "$out" "already posted for h1" "pagination: marker found on page 2"
+assert_eq "0" "$(grep -c POST "$w/calls.log" || true)" "no POST when marker found via pagination"
+
+# per-finding discussion failures: one bad discussion must not abort the rest
+cat > "$w/findings2.json" <<'EOF'
+[
+ {"id":"B1","dimension":"correctness","severity":"BLOCKER","rule_based":false,"file":"internal/service/order.go","line":24,"title":"Error swallowed","evidence":"return nil, nil","why":"caller cannot distinguish failure","fix":"return the wrapped error","spec_ref":"","score":95},
+ {"id":"B2","dimension":"correctness","severity":"MAJOR","rule_based":false,"file":"go.mod","line":3,"title":"Bad version pin","evidence":"go 1.20","why":"pinned too old","fix":"bump go directive","spec_ref":"","score":80}
+]
+EOF
+: > "$w/calls.log"
+export FAKE_GLAB_FAIL_DISCUSSION_PATH="go.mod"
+out=$(bash "$S/gitlab-post.sh" --project group/repo --mr 7 --head-sha h1 --findings "$w/findings2.json" --summary "$w/summary.md")
+rc=$?
+unset FAKE_GLAB_FAIL_DISCUSSION_PATH
+assert_eq "0" "$rc" "exits 0 even when a discussion POST fails"
+assert_contains "$out" "1 failed" "final line reports the failed discussion count"
+assert_eq "2" "$(grep -c 'merge_requests/7/discussions' <(grep POST "$w/calls.log") || true)" "both discussions were attempted"
+
 finish

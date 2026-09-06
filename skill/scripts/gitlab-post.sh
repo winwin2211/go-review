@@ -23,8 +23,21 @@ api_post() { # endpoint json
   if [[ $DRY -eq 1 ]]; then printf 'DRY: POST %s %s\n' "$1" "$2"; else printf '%s' "$2" | glab api --method POST --input - "$1" >/dev/null; fi
 }
 
-# idempotency
-if api_get "$BASE_EP/notes?per_page=100" | jq -e --arg m "$MARKER" 'map(select(.body | contains($m))) | length > 0' >/dev/null; then
+# idempotency: paginate through notes (hard cap 50 pages) and die if a page fetch fails,
+# rather than silently treating a failed GET as "not yet posted".
+notes_page=1
+already_posted=0
+while [[ $notes_page -le 50 ]]; do
+  notes=$(api_get "$BASE_EP/notes?per_page=100&page=$notes_page") || die "cannot list MR notes; refusing to post"
+  if jq -e --arg m "$MARKER" 'map(select(.body | contains($m))) | length > 0' <<<"$notes" >/dev/null; then
+    already_posted=1
+    break
+  fi
+  note_count=$(jq 'length' <<<"$notes")
+  [[ "$note_count" -lt 100 ]] && break
+  notes_page=$((notes_page + 1))
+done
+if [[ $already_posted -eq 1 ]]; then
   echo "already posted for $SHA"; exit 0
 fi
 
@@ -41,11 +54,28 @@ if [[ "$(jq length <<<"$outside")" -gt 0 ]]; then
 fi
 api_post "$BASE_EP/notes" "$(jq -nc --arg b "$body" '{body: $b}')"
 
-jq -c '.[]' <<<"$inside" | while read -r f; do
+# post inline discussions one by one; a failed POST is logged and counted, not fatal,
+# since the summary note is already posted (avoid leaving a half-posted run silent).
+ok=0
+failed=0
+while read -r f; do
+  fid=$(jq -r '.id' <<<"$f")
+  ffile=$(jq -r '.file' <<<"$f")
+  fline=$(jq -r '.line' <<<"$f")
   note=$(jq -r '"**\(.severity) \(.id): \(.title)**\n\nEvidence: `\(.evidence)`\n\nWhy: \(.why)\n\nFix: \(.fix)" + (if .spec_ref != "" then "\n\nSpec: \(.spec_ref)" else "" end)' <<<"$f")
-  payload=$(jq -nc --arg b "$note" --arg p "$(jq -r .file <<<"$f")" --argjson l "$(jq -r .line <<<"$f")" \
+  payload=$(jq -nc --arg b "$note" --arg p "$ffile" --argjson l "$fline" \
     --arg bs "$base_sha" --arg ss "$start_sha" --arg hs "$head_sha" \
     '{body: $b, position: {position_type: "text", new_path: $p, new_line: $l, base_sha: $bs, start_sha: $ss, head_sha: $hs}}')
-  api_post "$BASE_EP/discussions" "$payload"
-done
-echo "posted summary + $(jq length <<<"$inside") inline discussions for $SHA"
+  if api_post "$BASE_EP/discussions" "$payload"; then
+    ok=$((ok + 1))
+  else
+    failed=$((failed + 1))
+    log "failed to post discussion for $fid ($ffile:$fline)"
+  fi
+done < <(jq -c '.[]' <<<"$inside")
+
+if [[ $failed -eq 0 ]]; then
+  echo "posted summary + $ok inline discussions for $SHA"
+else
+  echo "posted summary + $ok inline discussions for $SHA; $failed failed (see stderr)"
+fi
