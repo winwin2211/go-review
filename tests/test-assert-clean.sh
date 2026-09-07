@@ -21,4 +21,12 @@ wt2="$out/wt2"; git -C "$fx/clean" worktree add -q "$wt2" main
 rm -rf "$wt2"
 assert_exit 0 bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$wt2"
 n=$(git -C "$fx/clean" worktree list | grep -c "$wt2" || true); assert_eq "0" "$n" "stale worktree metadata pruned"
+
+assert_exit 1 bash "$S/assert-clean.sh" --repo "$out/does-not-exist" --out "$out"
+r=$(bash "$S/assert-clean.sh" --repo "$out/does-not-exist" --out "$out" 2>&1 || true)
+assert_not_contains "$r" "verified" "non-git repo path never reports verified"
+
+out_nobaseline=$(tmpdir)
+assert_exit 1 bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_nobaseline"
+
 finish

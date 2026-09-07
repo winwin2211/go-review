@@ -10,6 +10,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n "$REPO" && -n "$OUT" ]] || die "usage: assert-clean.sh --repo R --out O [--worktree W]"
+git -C "$REPO" rev-parse --show-toplevel >/dev/null 2>&1 || die "not a git working tree: $REPO"
+[[ -f "$OUT/status-before.txt" && -f "$OUT/stash-before.txt" ]] || die "missing baseline files in $OUT (expected status-before.txt and stash-before.txt)"
 if [[ -n "$WT" && -d "$WT" ]]; then
   git -C "$REPO" worktree remove --force "$WT" || rm -rf "$WT"
 fi

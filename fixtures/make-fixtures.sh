@@ -323,34 +323,46 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
-type fakeSaver struct{ err error }
+type fakeSaver struct {
+	err   error
+	calls int
+}
 
-func (f fakeSaver) Save(context.Context, Order) error { return f.err }
+func (f *fakeSaver) Save(context.Context, Order) error { f.calls++; return f.err }
 
 func TestPlaceOrder(t *testing.T) {
 	boom := errors.New("boom")
 	cases := []struct {
-		name    string
-		order   Order
-		saveErr error
-		wantErr error
+		name      string
+		order     Order
+		saveErr   error
+		wantErr   error
+		wantCalls int
 	}{
-		{"success", Order{ID: "1", User: "u", Qty: 2}, nil, nil},
-		{"invalid qty", Order{ID: "1", User: "u", Qty: 0}, nil, ErrInvalidQty},
-		{"repo error", Order{ID: "1", User: "u", Qty: 1}, boom, boom},
+		{"success", Order{ID: "1", User: "u", Qty: 2}, nil, nil, 1},
+		{"invalid qty", Order{ID: "1", User: "u", Qty: 0}, nil, ErrInvalidQty, 0},
+		{"repo error", Order{ID: "42", User: "u", Qty: 1}, boom, boom, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := New(fakeSaver{err: tc.saveErr})
+			fs := &fakeSaver{err: tc.saveErr}
+			s := New(fs)
 			got, err := s.PlaceOrder(context.Background(), tc.order)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tc.wantErr)
 			}
-			if tc.wantErr == nil && (got == nil || got.ID != tc.order.ID) {
-				t.Fatalf("got = %+v", got)
+			if fs.calls != tc.wantCalls {
+				t.Fatalf("Save calls = %d, want %d", fs.calls, tc.wantCalls)
+			}
+			if tc.wantErr == nil && (got == nil || *got != tc.order) {
+				t.Fatalf("got = %+v, want %+v", got, tc.order)
+			}
+			if tc.saveErr != nil && !strings.Contains(err.Error(), tc.order.ID) {
+				t.Fatalf("error %q does not mention order id %s", err, tc.order.ID)
 			}
 		})
 	}
@@ -398,7 +410,7 @@ EOF
 cat > "$C/docs/superpowers/plans/2026-09-01-XBI-100-orders-plan.md" <<'EOF'
 # XBI-100 Order Placement Implementation Plan
 
-- [x] Task 1: Write failing table test `TestPlaceOrder` (success, invalid qty, repo error)
+- [x] Task 1: Write failing table test `TestPlaceOrder` (success, invalid qty, repo error; asserts Save call count and wrapped error mentions the order id)
 - [x] Task 2: Implement `OrderService.PlaceOrder` and `ErrInvalidQty`
 - [x] Task 3: Run `go test -race ./...`
 EOF
