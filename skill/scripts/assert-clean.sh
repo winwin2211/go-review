@@ -29,11 +29,20 @@ if [[ -n "$WT" ]]; then
   wt_real=$(resolve_path "$WT")
   registered=$(git -C "$REPO" worktree list --porcelain |
     awk -v w="$wt_real" '$1 == "worktree" { p = $0; sub(/^worktree /, "", p); if (p == w) found = 1 } END { print (found ? 1 : 0) }')
-  [[ "$registered" == "1" ]] || die "refusing to remove unregistered worktree path: $WT"
-  if [[ -d "$WT" ]]; then
-    git -C "$REPO" worktree remove --force "$WT" || rm -rf "$WT"
+  if [[ "$registered" != "1" ]]; then
+    # A path that doesn't exist and was never registered is a benign no-op
+    # (e.g. an MR run that bailed before creating the worktree): prune any
+    # stale registration and fall through to the clean check instead of
+    # dying. A path that exists but isn't a registered worktree is still a
+    # hard error -- never touch or trust it.
+    [[ -e "$WT" ]] && die "refusing to remove unregistered worktree path: $WT"
+    git -C "$REPO" worktree prune
+  else
+    if [[ -d "$WT" ]]; then
+      git -C "$REPO" worktree remove --force "$WT" || rm -rf "$WT"
+    fi
+    git -C "$REPO" worktree prune
   fi
-  git -C "$REPO" worktree prune
 fi
 
 rc=0

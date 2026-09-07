@@ -64,4 +64,9 @@ bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$not_regis
 [[ "$rc" -ne 0 ]] && pass || fail "C5: --worktree pointing at an unregistered directory must not exit 0"
 [[ -d "$not_registered" ]] && pass || fail "C5: an unregistered --worktree directory must not be removed"
 
+# MINOR: a --worktree path that was never created (an MR run that bailed
+# before creating it) is a benign no-op, not a hard error.
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$out/never-created")
+assert_eq "No artifacts left: verified" "$r" "MINOR: --worktree for a path never created is a no-op, not an error"
+
 finish

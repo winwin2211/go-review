@@ -2,17 +2,25 @@
 
 All scripts live in `scripts/` next to this file. `$SKILL` below means the
 directory containing `SKILL.md`. `$WORK` is a directory created with
-`mktemp -d`; it must be outside the reviewed repo.
+`mktemp -d`; it must be outside the reviewed repo. `collect.sh` requires `go`
+and, whenever tools actually run (i.e. not `--no-tools`), `perl` on PATH —
+`perl` backs the timeout wrapper in `lib.sh`.
 
 ## Commands
 
 Local diff (working tree + branch vs base):
 
-    bash "$SKILL/scripts/collect.sh" --repo "$REPO" --head WORKTREE --out "$WORK" [--base <ref>] [--no-tools] [--full-tests]
+    bash "$SKILL/scripts/collect.sh" --repo "$REPO" --head WORKTREE --out "$WORK" [--base <ref>] [--status-repo <path>] [--no-tools] [--full-tests]
 
 Branch or MR head already checked out in `$REPO` (or in a temp worktree):
 
-    bash "$SKILL/scripts/collect.sh" --repo "$REPO" --head <ref-or-sha> --out "$WORK" [--base <ref>] [--no-tools] [--full-tests]
+    bash "$SKILL/scripts/collect.sh" --repo "$REPO" --head <ref-or-sha> --out "$WORK" [--base <ref>] [--status-repo <path>] [--no-tools] [--full-tests]
+
+`--status-repo <path>` names the working tree the no-artifact baselines
+(`status-before.txt`, `stash-before.txt`, `status-ignored-before.txt`) are
+taken from; it defaults to `--repo`. Pass it whenever `--repo` is a temporary
+worktree (MR mode) rather than the repo `assert-clean.sh` will later check,
+so the baseline describes the same working tree the final check inspects.
 
 Spec candidates (run after collect so `changed-packages.txt` exists):
 

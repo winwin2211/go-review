@@ -18,22 +18,24 @@ classify_tests() {
 
 if [[ "${1:-}" == "--classify-only" ]]; then classify_tests "$2"; exit 0; fi
 
-REPO="" BASE="" HEAD="" OUT="" NO_TOOLS=0 FULL_TESTS=0
+REPO="" BASE="" HEAD="" OUT="" STATUS_REPO="" NO_TOOLS=0 FULL_TESTS=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) REPO=$2; shift 2 ;;
     --base) BASE=$2; shift 2 ;;
     --head) HEAD=$2; shift 2 ;;
     --out) OUT=$2; shift 2 ;;
+    --status-repo) STATUS_REPO=$2; shift 2 ;;
     --no-tools) NO_TOOLS=1; shift ;;
     --full-tests) FULL_TESTS=1; shift ;;
     *) die "unknown arg: $1" ;;
   esac
 done
-[[ -n "$REPO" && -n "$OUT" && -n "$HEAD" ]] || die "usage: collect.sh --repo R --base B --head H|WORKTREE --out O [--no-tools] [--full-tests]"
+[[ -n "$REPO" && -n "$OUT" && -n "$HEAD" ]] || die "usage: collect.sh --repo R --base B --head H|WORKTREE --out O [--status-repo P] [--no-tools] [--full-tests]"
 command -v go >/dev/null || die "go not found on PATH"
-command -v perl >/dev/null || die "perl not found on PATH"
 REPO=$(cd "$REPO" && pwd -P)
+[[ -n "$STATUS_REPO" ]] || STATUS_REPO="$REPO"
+STATUS_REPO=$(cd "$STATUS_REPO" && pwd -P)
 [[ -n "$BASE" ]] || BASE=$(resolve_base "$REPO")
 assert_outside "$OUT" "$REPO"
 mkdir -p "$OUT/tools"
@@ -42,10 +44,12 @@ OUT=$(cd "$OUT" && pwd -P)
 # Baseline snapshots for assert-clean.sh's no-artifact guarantee: taken as
 # early as possible (before merge-base / diff / tool runs, any of which can
 # fail on a bad --base) so a later failure never leaves the reviewed repo
-# without a baseline to compare against.
-git -C "$REPO" status --porcelain > "$OUT/status-before.txt"
-git -C "$REPO" status --porcelain --ignored > "$OUT/status-ignored-before.txt"
-git -C "$REPO" stash list > "$OUT/stash-before.txt"
+# without a baseline to compare against. Taken against --status-repo (the
+# working tree assert-clean.sh will later be run against), which defaults to
+# --repo but differs from it in MR mode, where --repo is a throwaway worktree.
+git -C "$STATUS_REPO" status --porcelain > "$OUT/status-before.txt"
+git -C "$STATUS_REPO" status --porcelain --ignored > "$OUT/status-ignored-before.txt"
+git -C "$STATUS_REPO" stash list > "$OUT/stash-before.txt"
 
 if [[ "$HEAD" == "WORKTREE" ]]; then MODE=worktree; HEAD_SHA=$(git -C "$REPO" rev-parse HEAD)
 else
@@ -164,6 +168,11 @@ if [[ $NO_TOOLS -eq 1 ]]; then
 fi
 [[ -n "$MODULE" ]] || { for t in build vet lint test vuln; do summary "$t" "UNAVAILABLE(no-module)" "$NO_MODULE_DETAIL"; done; exit 0; }
 
+# perl backs run_with_timeout (lib.sh), used only by the tool runs below; not
+# needed for --no-tools or --classify-only, and not needed for the go list -m
+# module detection above, so it's checked here rather than up front.
+command -v perl >/dev/null || die "perl not found on PATH"
+
 cd "$MODULE_DIR"
 st=$(run_with_timeout 180 "$OUT/tools/build.txt" go build -o "$OUT/bin/" ./...)
 case $st in
@@ -206,8 +215,12 @@ if [[ -s "$OUT/test-packages.txt" ]]; then
   if [[ $st == TIMEOUT ]]; then summary test "UNAVAILABLE(timeout)" "600s"
   elif [[ $st == MISSING ]]; then summary test "UNAVAILABLE(missing)" "go not found"
   elif [[ $nf -gt 0 ]]; then summary test FAIL "$nf failing, $nn not runnable locally"
-  elif [[ $st == FAIL ]]; then
-    firstline=$(head -1 "$OUT/tools/test.txt" 2>/dev/null || true)
+  elif [[ $st == FAIL && $nn -eq 0 ]]; then
+    # go test itself failed (non-zero exit) but no package was classified
+    # FAIL or NOT_RUNNABLE at all -- a toolchain-level run error (e.g. a bad
+    # -coverprofile path), not a test failure. A package that fails for an
+    # environment reason is NOT_RUNNABLE, not this branch: see the nn check.
+    firstline=$(head -1 "$OUT/tools/test.txt" 2>/dev/null | tr '\t' ' ' | cut -c1-200 || true)
     summary test "UNAVAILABLE(run-error)" "$firstline"
   else summary test OK "$nn not runnable locally"; fi
 else

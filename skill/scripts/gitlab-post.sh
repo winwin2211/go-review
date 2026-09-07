@@ -46,10 +46,11 @@ base_sha=$(jq -r .diff_refs.base_sha <<<"$refs"); start_sha=$(jq -r .diff_refs.s
 paths=$(api_get "$BASE_EP/changes" | jq -r '.changes[].new_path')
 
 # Inline only findings whose file is in the MR's changed paths AND have a
-# usable (numeric, > 0) line: `--argjson l` on a null or 0 line aborts the
-# whole run (jq schema allows line: 0 for findings with no single anchor
-# line), and since the summary note is posted first, that abort would lose
-# every inline comment while leaving "already posted" for any retry.
+# usable (numeric, > 0) line: GitLab's discussions API rejects a position
+# with new_line 0 (line: 0 is how the schema represents a finding with no
+# single anchor line), so posting one there would just fail, and since the
+# summary note is posted first, that failure would lose the inline comment
+# while leaving "already posted" for any retry.
 # Everything else — including line-0 findings on in-diff files — is folded
 # into the summary's "Outside the diff" section instead.
 is_inline='(.file as $f | $p | index($f)) and (((.line // 0)) > 0)'

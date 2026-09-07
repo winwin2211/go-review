@@ -24,7 +24,10 @@ Check out the head without touching the user's branch:
     git -C "$REPO" fetch origin "$SOURCE_BRANCH"
     git -C "$REPO" worktree add --detach "$WORK/wt" "$HEAD_SHA"
 
-Then run `collect.sh --repo "$WORK/wt" --head "$HEAD_SHA" --base "${BASE:-origin/$TARGET_BRANCH}"`.
+Then run `collect.sh --repo "$WORK/wt" --head "$HEAD_SHA" --base "${BASE:-origin/$TARGET_BRANCH}" --status-repo "$REPO"`.
+`--status-repo "$REPO"` is required here: the no-artifact baselines must
+describe the same working tree that `assert-clean.sh --repo "$REPO"` checks
+in step 6, not the temporary `$WORK/wt` that collect.sh reads the diff from.
 A user-supplied `--base` overrides the MR target branch; otherwise the MR's
 own target branch is used. If the local branch has the same name as the source branch but a different
 sha, warn in the report header: "local <branch> is at <sha>, reviewed MR head
@@ -40,10 +43,11 @@ be posted and receiving an explicit yes.
       --findings "$WORK/findings.json" --summary "$WORK/summary.md" [--dry-run]
 
 Behavior: one summary note carrying the marker `<!-- go-review:<sha> -->`,
-then one inline discussion per finding whose file is in the MR diff. Findings
-outside the diff are folded into the summary. A rerun on the same head sha
-prints `already posted` and posts nothing. Use `--dry-run` to preview the
-API calls.
+then one inline discussion per finding whose file is in the MR diff and whose
+`line` is a usable (> 0) anchor. Findings outside the diff, and in-diff
+findings with no such line, are folded into the summary. A rerun on the same
+head sha prints `already posted` and posts nothing. Use `--dry-run` to
+preview the API calls.
 
 `findings.json` is the verified findings array (schema in
 `severity-verdict.md`). `summary.md` is the Markdown version of the terminal

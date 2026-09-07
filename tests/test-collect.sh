@@ -113,6 +113,83 @@ bash "$S/collect.sh" --repo "$c4" --base main --head feature/x --out "$c4out"
 assert_contains "$(cat "$c4out/tools/summary.txt")" $'test\tUNAVAILABLE(run-error)' "C4: go test's own failure is surfaced, not swallowed as OK"
 assert_not_contains "$(cat "$c4out/tools/summary.txt")" $'test\tOK' "C4: must not report test OK when go test itself failed"
 
+# --- Important 1: a NOT_RUNNABLE package (go test exits non-zero, but the
+# failure is an environment-reason test, not a genuine FAIL) must report
+# test OK with the not-runnable count, never run-error ---
+nr=$(tmpdir)
+git -C "$nr" init -q -b main
+git -C "$nr" config user.email fixture@example.com
+git -C "$nr" config user.name fixture
+mkdir -p "$nr/pkg"
+cat > "$nr/go.mod" <<'EOF'
+module example.com/nr
+
+go 1.22
+EOF
+cat > "$nr/pkg/a.go" <<'EOF'
+package pkg
+
+func A() int { return 1 }
+EOF
+git -C "$nr" add -A && git -C "$nr" commit -q -m base
+git -C "$nr" checkout -q -b feature/x
+cat > "$nr/pkg/a_test.go" <<'EOF'
+package pkg
+
+import (
+	"net"
+	"testing"
+)
+
+func TestPing(t *testing.T) {
+	_, err := net.Dial("tcp", "127.0.0.1:1")
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+}
+EOF
+git -C "$nr" add -A && git -C "$nr" commit -q -m "add integration test"
+nrout=$(tmpdir)
+bash "$S/collect.sh" --repo "$nr" --base main --head feature/x --out "$nrout"
+nrtest=$(grep $'^test\t' "$nrout/tools/summary.txt")
+assert_contains "$nrtest" $'test\tOK' "Important 1: a NOT_RUNNABLE-only test package reports OK"
+assert_contains "$nrtest" "1 not runnable locally" "Important 1: the not-runnable count is in the test detail"
+assert_not_contains "$nrtest" "run-error" "Important 1: a NOT_RUNNABLE package must not be reported as run-error"
+
+# --- Important 2: --status-repo takes the no-artifact baseline against a
+# different working tree than --repo, for MR mode where --repo is a
+# temporary worktree but assert-clean.sh later checks the real repo ---
+i2main=$(tmpdir)
+git -C "$i2main" init -q -b main
+git -C "$i2main" config user.email fixture@example.com
+git -C "$i2main" config user.name fixture
+echo 'bin/' > "$i2main/.gitignore"
+mkdir -p "$i2main/pkg"
+cat > "$i2main/go.mod" <<'EOF'
+module example.com/i2
+
+go 1.22
+EOF
+cat > "$i2main/pkg/a.go" <<'EOF'
+package pkg
+
+func A() int { return 1 }
+EOF
+git -C "$i2main" add -A && git -C "$i2main" commit -q -m base
+mkdir -p "$i2main/bin"
+touch "$i2main/bin/x"
+i2wt="$out/i2wt"
+git -C "$i2main" worktree add -q --detach "$i2wt" main
+
+i2out=$(tmpdir)
+bash "$S/collect.sh" --repo "$i2wt" --base main --head WORKTREE --out "$i2out" --status-repo "$i2main" --no-tools
+r=$(bash "$S/assert-clean.sh" --repo "$i2main" --out "$i2out")
+assert_eq "No artifacts left: verified" "$r" "Important 2: --status-repo takes the baseline from the real repo, matching assert-clean.sh's target"
+
+i2out2=$(tmpdir)
+bash "$S/collect.sh" --repo "$i2wt" --base main --head WORKTREE --out "$i2out2" --no-tools
+assert_exit 2 bash "$S/assert-clean.sh" --repo "$i2main" --out "$i2out2"
+
 # --- I1: nontest-lines counts only non-test .go files; untracked _test.go files don't inflate it ---
 nt=$(tmpdir)
 git -C "$nt" init -q -b main

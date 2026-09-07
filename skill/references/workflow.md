@@ -31,6 +31,10 @@ Run `scripts/collect.sh` and then `scripts/find-specs.sh` exactly as shown in
 `references/tooling.md` (section "Commands"). Pass `--no-tools` / `--full-tests`
 / `--spec` / `--base` through: give `collect.sh --base "$BASE"` whenever `BASE`
 is non-empty (omit the flag when it is empty and let `collect.sh` resolve it).
+When `REVIEW_REPO` is a temporary worktree (MR mode), also pass
+`collect.sh --status-repo "$REPO"`, per `references/gitlab.md`, so the
+no-artifact baselines describe the repo step 6 actually checks, not the
+worktree.
 After `collect.sh` runs, read `BASE=` back out of `$WORK/meta.env` — this is
 now always set, resolved or not — and pass that value as `find-specs.sh --base`
 so the git-log signal always has a base. Read `$WORK/tools/summary.txt` and

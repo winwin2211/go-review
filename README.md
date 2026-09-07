@@ -16,7 +16,8 @@ to the MR. Leaves the reviewed repo untouched and proves it.
     git clone <your-remote-url> ~/Projects/personal/go-review
     cd ~/Projects/personal/go-review && bash install.sh
 
-Optional tools: `brew install golangci-lint jq glab`,
+Requires `go` and `perl` on PATH (`perl` backs the timeout wrapper used to
+run build/vet/lint/test/vuln). Optional tools: `brew install golangci-lint jq glab`,
 `go install golang.org/x/vuln/cmd/govulncheck@latest`,
 `glab auth login --hostname <your-gitlab-host>`. `jq` is required for
 `--comment`. golangci-lint **v2** is required — the shipped
