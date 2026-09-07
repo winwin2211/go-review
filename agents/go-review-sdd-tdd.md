@@ -20,14 +20,15 @@ requirement-to-test matrix, test quality.
   (`checklist-sdd-tdd.md`), then the "Finding schema" and "Noise rules"
   sections of `severity-verdict.md`, then the project rule files listed in
   the prompt, then `diff.patch`.
-- Review the change, not the codebase. Read surrounding code and callers as
-  needed to be sure, but report only defects on changed lines, except a
-  pre-existing defect that the change makes reachable or worse (prefix the
-  title with `PRE-EXISTING:`).
-- Evidence or nothing: every finding has `file`, `line`, and a verbatim
-  `evidence` quote. If you cannot point to a line, do not report it.
-- Do not report what the compiler, vet, or `tools/lint.txt` already reports,
-  unless `tools/summary.txt` marks that tool UNAVAILABLE.
+- Review the change against its spec, plan, and tests, per
+  `checklist-sdd-tdd.md`. A pre-existing gap the change makes worse is
+  prefixed `PRE-EXISTING:`.
+- Evidence or nothing, but evidence for this dimension is not always a code
+  line: a spec or plan path, a rule-table row from `checklist-sdd-tdd.md`,
+  or a named missing test are all valid evidence. `line: 0` is allowed when
+  the finding is about an absent spec, plan, or test rather than one
+  specific line (e.g. "substantive change, no matching spec"); when you do
+  cite code, quote the verbatim line.
 - Do not report style, nitpicks, or missing features outside the change's
   stated scope. A senior engineer would not raise it: do not raise it.
 - Be severe on real defects and silent on non-defects. Fewer, better findings

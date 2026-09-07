@@ -104,7 +104,9 @@ filling the SDD/TDD block from `sdd.json`. Keep the final line for step 6.
 
 If `--comment`:
 1. Write `$WORK/summary.md` per `references/report-format.md` (section "MR summary").
-2. Show the summary to the user and ask: "Post this to MR !<iid>? (yes/no)".
+2. Show the summary to the user and ask: "Post this to <group/repo>!<iid>? (yes/no)",
+   naming the resolved project as well as the MR, so a wrong-project post
+   cannot be confirmed by accident.
 3. On yes, run `scripts/gitlab-post.sh` per `references/gitlab.md` (section "Posting").
    Print its last line.
 
@@ -123,3 +125,10 @@ Print the `No artifacts left: verified` line as the last line of the report.
 If `assert-clean.sh` exits 2, print its output verbatim under a heading
 `ARTIFACTS LEFT` and tell the user which files to remove from the reviewed
 repo; do not remove those yourself.
+
+If `assert-clean.sh` exits 1 (it could not even run the check — e.g. a
+missing baseline file because collection aborted before writing one, or a
+bad `--repo`/`--worktree`), report that the no-artifact check could not run,
+name the reason from the script's stderr verbatim, and tell the user to
+check the reviewed repo by hand; do not claim "verified" and do not treat
+this the same as exit 2.

@@ -24,6 +24,7 @@ MINOR
 [N1] ...
 
 SDD/TDD
+  Skip-SDD: <reason>                    (only when --skip-sdd "<reason>" was given)
   Change: substantive (<nontest-lines> non-test lines; new handler List)   | trivial (reason)
   Spec: <path> (matched by ticket:XBI-100, git-log)                        | none found (nearest: <path>, <path>)
   Plan: <path>                                                             | none

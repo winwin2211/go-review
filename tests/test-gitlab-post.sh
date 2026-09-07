@@ -44,8 +44,9 @@ export PATH="$w/bin:$PATH" FAKE_GLAB_LOG="$w/calls.log"
 
 cat > "$w/findings.json" <<'EOF'
 [
- {"id":"B1","dimension":"correctness","severity":"BLOCKER","rule_based":false,"file":"internal/service/order.go","line":24,"title":"Error swallowed","evidence":"return nil, nil","why":"caller cannot distinguish failure","fix":"return the wrapped error","spec_ref":"","score":95},
- {"id":"M1","dimension":"sdd-tdd","severity":"MAJOR","rule_based":true,"file":"docs/missing.md","line":0,"title":"No plan","evidence":"","why":"substantive change without plan","fix":"add docs/superpowers/plans/...","spec_ref":"","score":100}
+ {"id":"B1","dimension":"correctness","severity":"BLOCKER","rule_based":false,"file":"internal/service/order.go","line":24,"title":"Error swallowed","evidence":"return nil, nil","why":"caller cannot distinguish failure","fix":"return the wrapped error","score":95},
+ {"id":"M1","dimension":"sdd-tdd","severity":"MAJOR","rule_based":true,"file":"docs/missing.md","line":0,"title":"No plan","evidence":"","why":"substantive change without plan","fix":"add docs/superpowers/plans/...","spec_ref":"","score":100},
+ {"id":"M2","dimension":"sdd-tdd","severity":"MAJOR","rule_based":true,"file":"go.mod","line":0,"title":"Dependency bump without plan","evidence":"","why":"substantive change without plan","fix":"add docs/superpowers/plans/...","spec_ref":"","score":100}
 ]
 EOF
 printf 'Verdict: REQUEST CHANGES\n' > "$w/summary.md"
@@ -58,6 +59,10 @@ assert_contains "$out" "DRY: POST projects/group%2Frepo/merge_requests/7/discuss
 assert_contains "$out" '"new_line":24' "inline position line"
 assert_contains "$out" '"base_sha":"b1"' "position base sha"
 assert_contains "$out" "Outside the diff" "non-diff finding folded into summary"
+assert_contains "$out" "M2" "line-0 finding on an in-diff file (go.mod) is folded into the summary, not posted inline"
+assert_not_contains "$out" '"new_line":0' "no discussion is ever attempted for a line-0 finding"
+assert_not_contains "$out" "Spec: null" "a finding with no spec_ref does not render Spec: null"
+assert_eq "1" "$(grep -c 'DRY: POST.*discussions' <<<"$out" || true)" "only the line>0, in-diff finding is posted inline"
 assert_eq "0" "$(grep -c '^api --method POST' "$w/calls.log" || true)" "no real POST in dry run"
 
 # real (fake) post: 1 note + 1 discussion

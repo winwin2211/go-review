@@ -27,7 +27,7 @@ Final no-artifact check (always run, even after errors):
 
 | File | Meaning |
 |---|---|
-| `meta.env` | `REPO, BASE, HEAD, HEAD_SHA, MERGE_BASE, MODE, MODULE` |
+| `meta.env` | `REPO, BASE, HEAD, HEAD_SHA, MERGE_BASE, MODE, MODULE, MODULE_DIR` |
 | `diff.patch` | unified diff; the review scope |
 | `changed-files.txt`, `changed-go-files.txt` | paths relative to repo |
 | `changed-packages.txt` | import paths of changed packages |
@@ -67,6 +67,12 @@ Inside the reviewed repo the orchestrator and every agent must never run:
 `goimports -w`, `golangci-lint run --fix`, `git stash`, `git checkout` of
 files, `git add`, or any command with a redirect into the repo. If a tool
 is missing, print the install hint from `tools/summary.txt` and continue.
+
+The no-artifact guarantee in `assert-clean.sh` compares tracked status,
+ignored-file status, and the stash list before and after the run; it cannot
+see `.git` internal writes made by `git fetch` or worktree add/remove (e.g.
+updated remote-tracking refs, packed-refs, or reflog entries) — those are
+outside the guarantee.
 
 ## Timeouts
 

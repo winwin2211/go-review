@@ -13,12 +13,14 @@ to the MR. Leaves the reviewed repo untouched and proves it.
 
 ## Install
 
-    git clone /Users/thangtrinh/Projects/personal/go-review ~/Projects/personal/go-review
+    git clone <your-remote-url> ~/Projects/personal/go-review
     cd ~/Projects/personal/go-review && bash install.sh
 
-Optional tools: `brew install golangci-lint glab`,
+Optional tools: `brew install golangci-lint jq glab`,
 `go install golang.org/x/vuln/cmd/govulncheck@latest`,
-`glab auth login --hostname <your-gitlab-host>`.
+`glab auth login --hostname <your-gitlab-host>`. `jq` is required for
+`--comment`. golangci-lint **v2** is required — the shipped
+`skill/scripts/golangci-strict.yml` config uses `version: "2"`.
 
 ## Layout
 

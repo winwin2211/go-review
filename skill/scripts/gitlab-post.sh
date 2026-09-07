@@ -45,8 +45,16 @@ refs=$(api_get "$BASE_EP")
 base_sha=$(jq -r .diff_refs.base_sha <<<"$refs"); start_sha=$(jq -r .diff_refs.start_sha <<<"$refs"); head_sha=$(jq -r .diff_refs.head_sha <<<"$refs")
 paths=$(api_get "$BASE_EP/changes" | jq -r '.changes[].new_path')
 
-inside=$(jq -c --argjson p "$(printf '%s\n' "$paths" | jq -R . | jq -s .)" '[.[] | select(.file as $f | $p | index($f))]' "$FINDINGS")
-outside=$(jq -c --argjson p "$(printf '%s\n' "$paths" | jq -R . | jq -s .)" '[.[] | select(.file as $f | ($p | index($f)) | not)]' "$FINDINGS")
+# Inline only findings whose file is in the MR's changed paths AND have a
+# usable (numeric, > 0) line: `--argjson l` on a null or 0 line aborts the
+# whole run (jq schema allows line: 0 for findings with no single anchor
+# line), and since the summary note is posted first, that abort would lose
+# every inline comment while leaving "already posted" for any retry.
+# Everything else — including line-0 findings on in-diff files — is folded
+# into the summary's "Outside the diff" section instead.
+is_inline='(.file as $f | $p | index($f)) and (((.line // 0)) > 0)'
+inside=$(jq -c --argjson p "$(printf '%s\n' "$paths" | jq -R . | jq -s .)" "[.[] | select($is_inline)]" "$FINDINGS")
+outside=$(jq -c --argjson p "$(printf '%s\n' "$paths" | jq -R . | jq -s .)" "[.[] | select(($is_inline) | not)]" "$FINDINGS")
 
 body=$(printf '%s\n\n%s' "$MARKER" "$(cat "$SUMMARY")")
 if [[ "$(jq length <<<"$outside")" -gt 0 ]]; then
@@ -62,7 +70,7 @@ while read -r f; do
   fid=$(jq -r '.id' <<<"$f")
   ffile=$(jq -r '.file' <<<"$f")
   fline=$(jq -r '.line' <<<"$f")
-  note=$(jq -r '"**\(.severity) \(.id): \(.title)**\n\nEvidence: `\(.evidence)`\n\nWhy: \(.why)\n\nFix: \(.fix)" + (if .spec_ref != "" then "\n\nSpec: \(.spec_ref)" else "" end)' <<<"$f")
+  note=$(jq -r '"**\(.severity) \(.id): \(.title)**\n\nEvidence: `\(.evidence)`\n\nWhy: \(.why)\n\nFix: \(.fix)" + (if ((.spec_ref // "") != "") then "\n\nSpec: \(.spec_ref)" else "" end)' <<<"$f")
   payload=$(jq -nc --arg b "$note" --arg p "$ffile" --argjson l "$fline" \
     --arg bs "$base_sha" --arg ss "$start_sha" --arg hs "$head_sha" \
     '{body: $b, position: {position_type: "text", new_path: $p, new_line: $l, base_sha: $bs, start_sha: $ss, head_sha: $hs}}')

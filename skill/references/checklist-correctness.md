@@ -40,7 +40,7 @@
 - Unbounded goroutine spawn in a loop over user-controlled input; no semaphore or worker pool.
 - Channel misuse: send on a channel with no guaranteed receiver (leak or block), close by the receiver, close twice, `range` over a channel that is never closed, unbuffered channel used as a queue between a producer and a slow consumer inside a request.
 - Loop variable captured by a goroutine or closure on Go < 1.22 (check `go.mod` `go` directive); on >= 1.22 per-iteration semantics apply, do not report.
-- `time.After` inside a hot loop (timer leak until fired); prefer `time.NewTimer` with `Stop`.
+- `time.After` inside a hot loop on Go < 1.23 (check `go.mod` `go` directive): timer leak until fired; prefer `time.NewTimer` with `Stop`. On >= 1.23, an unreferenced `time.After` timer is garbage collected before firing, so this is not a leak; do not report unless the timer is still reachable (e.g. stored in a variable) and never stopped.
 - `sync.Once` / lazy init that can return a partially initialized value on error.
 - `errgroup` used without `WithContext` when workers do cancellable I/O, or the group's ctx not passed into the workers. A plain `errgroup.Group` for CPU-only fan-out with no cancellation need is fine.
 - Ticker/cron/background loops: no exit path on shutdown, no recover, no backoff on repeated failure.
