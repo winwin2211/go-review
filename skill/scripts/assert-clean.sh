@@ -2,26 +2,48 @@
 # Verify the reviewed repo is unchanged after a go-review run.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
+usage="usage: assert-clean.sh --repo R --out O [--worktree W]"
 REPO="" OUT="" WT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --repo) REPO=$2; shift 2 ;; --out) OUT=$2; shift 2 ;; --worktree) WT=$2; shift 2 ;;
+    --repo) [[ $# -ge 2 ]] || die "$usage"; REPO=$2; shift 2 ;;
+    --out) [[ $# -ge 2 ]] || die "$usage"; OUT=$2; shift 2 ;;
+    --worktree) [[ $# -ge 2 ]] || die "$usage"; WT=$2; shift 2 ;;
     *) die "unknown arg: $1" ;;
   esac
 done
-[[ -n "$REPO" && -n "$OUT" ]] || die "usage: assert-clean.sh --repo R --out O [--worktree W]"
+[[ -n "$REPO" && -n "$OUT" ]] || die "$usage"
 git -C "$REPO" rev-parse --show-toplevel >/dev/null 2>&1 || die "not a git working tree: $REPO"
-[[ -f "$OUT/status-before.txt" && -f "$OUT/stash-before.txt" ]] || die "missing baseline files in $OUT (expected status-before.txt and stash-before.txt)"
-if [[ -n "$WT" && -d "$WT" ]]; then
-  git -C "$REPO" worktree remove --force "$WT" || rm -rf "$WT"
-fi
+[[ -f "$OUT/status-before.txt" && -f "$OUT/stash-before.txt" && -f "$OUT/status-ignored-before.txt" ]] ||
+  die "missing baseline files in $OUT (expected status-before.txt, stash-before.txt and status-ignored-before.txt)"
+
 if [[ -n "$WT" ]]; then
+  # $WT is composed by the orchestrator (in practice, an LLM) and must never
+  # be trusted blindly: if it were ever equal to $REPO itself, `git worktree
+  # remove` refuses ("is a main working tree") and a naive `rm -rf` fallback
+  # would then delete the reviewed repository. Require both that $WT
+  # resolves outside $REPO AND that it is actually a worktree git knows
+  # about before touching it either way; otherwise die without removing
+  # anything.
+  assert_outside "$WT" "$REPO"
+  wt_real=$(resolve_path "$WT")
+  registered=$(git -C "$REPO" worktree list --porcelain |
+    awk -v w="$wt_real" '$1 == "worktree" { p = $0; sub(/^worktree /, "", p); if (p == w) found = 1 } END { print (found ? 1 : 0) }')
+  [[ "$registered" == "1" ]] || die "refusing to remove unregistered worktree path: $WT"
+  if [[ -d "$WT" ]]; then
+    git -C "$REPO" worktree remove --force "$WT" || rm -rf "$WT"
+  fi
   git -C "$REPO" worktree prune
 fi
+
 rc=0
 diff "$OUT/status-before.txt" <(git -C "$REPO" status --porcelain) > "$OUT/status-diff.txt" || rc=2
 diff "$OUT/stash-before.txt" <(git -C "$REPO" stash list) > "$OUT/stash-diff.txt" || rc=2
+diff "$OUT/status-ignored-before.txt" <(git -C "$REPO" status --porcelain --ignored) > "$OUT/status-ignored-diff.txt" || rc=2
 if [[ $rc -eq 0 ]]; then echo "No artifacts left: verified"; exit 0; fi
-echo "ARTIFACTS LEFT IN REPO (bug in go-review, please report):" >&2
-cat "$OUT/status-diff.txt" "$OUT/stash-diff.txt" >&2
+{
+  echo "THE REVIEWED REPO CHANGED DURING THE RUN."
+  echo "The repo's own test suite is the most likely cause. These paths need checking by hand:"
+  cat "$OUT/status-diff.txt" "$OUT/stash-diff.txt" "$OUT/status-ignored-diff.txt"
+} >&2
 exit 2
