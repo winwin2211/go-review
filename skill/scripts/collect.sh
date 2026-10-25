@@ -7,15 +7,18 @@ source "$HERE/lib.sh"
 NOT_RUNNABLE_RE='connection refused|no such host|dial tcp|i/o timeout|connect: cannot|no route to host|environment variable .* not set|config file not found|open .*\.env: no such file'
 
 # Per-tool budgets in seconds; override with GO_REVIEW_TIMEOUT_<TOOL>. go test
-# gets its own -timeout 10s below the test budget so a hung test dies inside
-# go with a goroutine dump (a FAIL with evidence) before the wrapper gives up
-# and reports UNAVAILABLE(timeout).
+# gets its own -timeout so a hung test dies inside go with a goroutine dump (a
+# FAIL with evidence) before the wrapper gives up and reports
+# UNAVAILABLE(timeout). go's clock starts with each test binary, the wrapper's
+# with go test, so the gap (a quarter of the budget, at least 10s) is what a
+# hung binary may spend compiling, linking and waiting for a free slot.
 T_BUILD=${GO_REVIEW_TIMEOUT_BUILD:-180}
 T_VET=${GO_REVIEW_TIMEOUT_VET:-180}
 T_LINT=${GO_REVIEW_TIMEOUT_LINT:-300}
 T_TEST=${GO_REVIEW_TIMEOUT_TEST:-600}
 T_VULN=${GO_REVIEW_TIMEOUT_VULN:-180}
-GO_TEST_TIMEOUT=$((T_TEST - 10)); [[ $GO_TEST_TIMEOUT -lt 1 ]] && GO_TEST_TIMEOUT=1
+GO_TEST_MARGIN=$((T_TEST / 4)); [[ $GO_TEST_MARGIN -lt 10 ]] && GO_TEST_MARGIN=10
+GO_TEST_TIMEOUT=$((T_TEST - GO_TEST_MARGIN)); [[ $GO_TEST_TIMEOUT -lt 1 ]] && GO_TEST_TIMEOUT=1
 
 # classify_tests TESTFILE -> lines "pkg<TAB>OK|FAIL|NOT_RUNNABLE|NO_TESTS"
 #

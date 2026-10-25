@@ -352,6 +352,32 @@ run_with_timeout 90 "$out/hang-run.txt" env GO_REVIEW_TIMEOUT_TEST=20 bash "$S/c
 assert_contains "$(cat "$hangout/tools/summary.txt" 2>/dev/null)" $'test\tFAIL' "a hung test is reported as test FAIL, not UNAVAILABLE(timeout)"
 assert_contains "$(cat "$hangout/tools/test.txt" 2>/dev/null)" "panic: test timed out" "go's own timeout panic is kept as evidence"
 
+# go's -timeout runs from each test binary's start, the wrapper's from go
+# test's: go test gets a quarter of the budget (at least 10s) less than the
+# wrapper, so a hung binary that starts late (compiling, linking, waiting for a
+# free slot) still panics inside go first. A stub go records the arguments and
+# hands over to the real binary in GOROOT (a version-manager shim such as
+# mise's looks go up on PATH again and would find the stub: an exec loop).
+tmo=$(tmpdir)
+git -C "$tmo" init -q -b main
+git -C "$tmo" config user.email fixture@example.com
+git -C "$tmo" config user.name fixture
+mkdir -p "$tmo/pkg"
+printf 'module example.com/tmo\n\ngo 1.22\n' > "$tmo/go.mod"
+printf 'package pkg\n\nfunc A() int { return 1 }\n' > "$tmo/pkg/a.go"
+git -C "$tmo" add -A && git -C "$tmo" commit -q -m base
+git -C "$tmo" checkout -q -b feature/x
+printf 'package pkg\n\nimport "testing"\n\nfunc TestA(t *testing.T) {\n\tif A() != 1 {\n\t\tt.Fatal("A")\n\t}\n}\n' > "$tmo/pkg/a_test.go"
+git -C "$tmo" add -A && git -C "$tmo" commit -q -m "add test"
+stub=$(tmpdir)
+printf '#!/usr/bin/env bash\n[[ "$1" == test ]] && printf "%%s\\n" "$@" > "%s/go-test-args.txt"\nexec "%s" "$@"\n' "$stub" "$(go env GOROOT)/bin/go" > "$stub/go"
+chmod +x "$stub/go"
+for budget in 600:450s 20:10s; do
+  rm -f "$stub/go-test-args.txt"; tmoout=$(tmpdir)
+  PATH="$stub:$PATH" GO_REVIEW_TIMEOUT_TEST=${budget%%:*} bash "$S/collect.sh" --repo "$tmo" --base main --head feature/x --out "$tmoout" >/dev/null 2>&1
+  assert_eq "${budget#*:}" "$(grep -A1 -x -- '-timeout' "$stub/go-test-args.txt" 2>/dev/null | tail -1)" "a ${budget%%:*}s test budget gives go test -timeout ${budget#*:}"
+done
+
 # --- packages that import a changed package only from their tests are tested too ---
 ti=$(tmpdir)
 git -C "$ti" init -q -b main
