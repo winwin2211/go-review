@@ -80,6 +80,12 @@ OUT=$(cd "$OUT" && pwd -P)
 # without a baseline to compare against. Taken against --status-repo (the
 # working tree assert-clean.sh will later be run against), which defaults to
 # --repo but differs from it in MR mode, where --repo is a throwaway worktree.
+#
+# mtime-marker goes first: at the end of the run assert-clean.sh lists every
+# file under the repo with an mtime newer than it, which catches writes that
+# leave `git status` unchanged (an already-modified file rewritten, a new file
+# inside an untracked or ignored directory).
+touch "$OUT/mtime-marker"
 git -C "$STATUS_REPO" status --porcelain > "$OUT/status-before.txt"
 git -C "$STATUS_REPO" status --porcelain --ignored > "$OUT/status-ignored-before.txt"
 git -C "$STATUS_REPO" stash list > "$OUT/stash-before.txt"

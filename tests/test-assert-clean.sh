@@ -65,8 +65,49 @@ bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$not_regis
 [[ -d "$not_registered" ]] && pass || fail "C5: an unregistered --worktree directory must not be removed"
 
 # MINOR: a --worktree path that was never created (an MR run that bailed
-# before creating it) is a benign no-op, not a hard error.
-r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$out/never-created")
+# before creating it) is a benign no-op, not a hard error. Uses a fresh
+# collect: the repo was committed to above, so an older baseline would
+# (correctly) report .gitignore as written after its start marker.
+out_nc=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_nc" --no-tools
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_nc" --worktree "$out_nc/never-created")
 assert_eq "No artifacts left: verified" "$r" "MINOR: --worktree for a path never created is a no-op, not an error"
+
+# --- writes that leave `git status` unchanged must still be caught ---
+# (a) a tracked file the user had already modified is rewritten during the run
+echo '// user wip' >> "$fx/clean/cmd/api/main.go"
+out_a=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_a" --no-tools
+echo '// tool rewrote this' >> "$fx/clean/cmd/api/main.go"
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_a" 2>&1 || true)
+assert_contains "$r" "cmd/api/main.go" "a pre-dirty tracked file rewritten during the run is caught"
+assert_not_contains "$r" "verified" "a pre-dirty tracked file rewritten during the run is not verified"
+git -C "$fx/clean" checkout -q -- cmd/api/main.go
+
+# (b) a new file appears inside a directory that was already untracked
+mkdir -p "$fx/clean/scratch"; echo x > "$fx/clean/scratch/x.txt"
+out_b=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_b" --no-tools
+echo y > "$fx/clean/scratch/y.txt"
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_b" 2>&1 || true)
+assert_contains "$r" "scratch/y.txt" "a new file inside a pre-existing untracked directory is caught"
+rm -rf "$fx/clean/scratch"
+
+# (c) a file is written inside a directory that was already ignored
+echo '/tmpbuild/' >> "$fx/clean/.gitignore"
+git -C "$fx/clean" add .gitignore && git -C "$fx/clean" commit -q -m "ignore tmpbuild"
+mkdir -p "$fx/clean/tmpbuild"; echo a > "$fx/clean/tmpbuild/a.bin"
+out_c=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_c" --no-tools
+echo b > "$fx/clean/tmpbuild/b.bin"
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_c" 2>&1 || true)
+assert_contains "$r" "tmpbuild/b.bin" "a file written inside a pre-existing ignored directory is caught"
+rm -rf "$fx/clean/tmpbuild"
+
+# and a run that writes nothing is still verified after all of the above
+out_ok=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_ok" --no-tools
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_ok")
+assert_eq "No artifacts left: verified" "$r" "a run that writes nothing is still verified"
 
 finish

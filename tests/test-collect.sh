@@ -305,6 +305,7 @@ bash "$S/collect.sh" --repo "$mono" --base no-such-branch-xyz --head WORKTREE --
 assert_file "$i7out/status-before.txt" "I7: status-before.txt written before the merge-base computation could fail"
 assert_file "$i7out/stash-before.txt" "I7: stash-before.txt written before the merge-base computation could fail"
 assert_file "$i7out/status-ignored-before.txt" "I7: status-ignored-before.txt written before the merge-base computation could fail"
+assert_file "$i7out/mtime-marker" "I7: mtime-marker written before the merge-base computation could fail"
 
 # --- a hung test must surface as FAIL with go's own timeout panic, not as UNAVAILABLE(timeout) ---
 source "$S/lib.sh"
