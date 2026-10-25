@@ -6,15 +6,22 @@ directory containing `SKILL.md`. `$WORK` is a directory created with
 and, whenever tools actually run (i.e. not `--no-tools`), `perl` on PATH —
 `perl` backs the timeout wrapper in `lib.sh`.
 
+`$REPO` is the user's checkout. `$REVIEW_REPO` is the tree that holds the
+code under review: the same as `$REPO` in local modes, the temporary
+worktree `$WORK/wt` in MR mode (`gitlab.md`). Everything that reads the
+reviewed code — `collect.sh`, `find-specs.sh`, the project rule files —
+takes `$REVIEW_REPO`; only the no-artifact baseline and check
+(`--status-repo`, `assert-clean.sh --repo`) take `$REPO`.
+
 ## Commands
 
 Local diff (working tree + branch vs base):
 
-    bash "$SKILL/scripts/collect.sh" --repo "$REPO" --head WORKTREE --out "$WORK" [--base <ref>] [--status-repo <path>] [--no-tools] [--full-tests]
+    bash "$SKILL/scripts/collect.sh" --repo "$REVIEW_REPO" --head WORKTREE --out "$WORK" [--base <ref>] [--status-repo <path>] [--no-tools] [--full-tests]
 
-Branch or MR head already checked out in `$REPO` (or in a temp worktree):
+Branch or MR head already checked out in `$REVIEW_REPO` (or in a temp worktree):
 
-    bash "$SKILL/scripts/collect.sh" --repo "$REPO" --head <ref-or-sha> --out "$WORK" [--base <ref>] [--status-repo <path>] [--no-tools] [--full-tests]
+    bash "$SKILL/scripts/collect.sh" --repo "$REVIEW_REPO" --head <ref-or-sha> --out "$WORK" [--base <ref>] [--status-repo <path>] [--no-tools] [--full-tests]
 
 `--status-repo <path>` names the working tree the no-artifact baselines
 (`status-before.txt`, `stash-before.txt`, `status-ignored-before.txt`) are
@@ -24,7 +31,11 @@ so the baseline describes the same working tree the final check inspects.
 
 Spec candidates (run after collect so `changed-packages.txt` exists):
 
-    bash "$SKILL/scripts/find-specs.sh" --repo "$REPO" --out "$WORK" --base <ref> --head <ref|WORKTREE> --branch "<branch>" --title "<mr title or empty>" [--spec <path>]
+    bash "$SKILL/scripts/find-specs.sh" --repo "$REVIEW_REPO" --out "$WORK" --base <ref> --head <ref|WORKTREE> --branch "<branch>" --title "<mr title or empty>" [--spec <path>]
+
+In MR mode this must be the worktree: a spec that exists only on the MR
+branch is invisible in a `$REPO` checked out elsewhere and would turn into
+a false "no matching spec" BLOCKER.
 
 Final no-artifact check (always run, even after errors):
 

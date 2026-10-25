@@ -28,7 +28,8 @@ directory (the parent of `references/`).
 ## 1. Collect evidence
 
 Run `scripts/collect.sh` and then `scripts/find-specs.sh` exactly as shown in
-`references/tooling.md` (section "Commands"). Pass `--no-tools` / `--full-tests`
+`references/tooling.md` (section "Commands"), both with
+`--repo "$REVIEW_REPO"`. Pass `--no-tools` / `--full-tests`
 / `--spec` / `--base` through: give `collect.sh --base "$BASE"` whenever `BASE`
 is non-empty (omit the flag when it is empty and let `collect.sh` resolve it).
 When `REVIEW_REPO` is a temporary worktree (MR mode), also pass
@@ -40,9 +41,10 @@ now always set, resolved or not — and pass that value as `find-specs.sh --base
 so the git-log signal always has a base. Read `$WORK/tools/summary.txt` and
 `$WORK/meta.env` and print a one-line progress message with the tool statuses.
 
-Collect project rule files: root `CLAUDE.md`, `CLAUDE.md` in each directory
-listed in `changed-files.txt` (walk up to root), `docs/code-standards/*.md`
-if present. Store the list in `$WORK/rules.txt`.
+Collect project rule files from `$REVIEW_REPO` (not `$REPO`, which in MR
+mode may be checked out on another branch): root `CLAUDE.md`, `CLAUDE.md` in
+each directory listed in `changed-files.txt` (walk up to root),
+`docs/code-standards/*.md` if present. Store the list in `$WORK/rules.txt`.
 
 ## 2. Dispatch the five reviewers
 

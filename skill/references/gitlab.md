@@ -29,7 +29,11 @@ Then run `collect.sh --repo "$WORK/wt" --head "$HEAD_SHA" --base "${BASE:-origin
 describe the same working tree that `assert-clean.sh --repo "$REPO"` checks
 in step 6, not the temporary `$WORK/wt` that collect.sh reads the diff from.
 A user-supplied `--base` overrides the MR target branch; otherwise the MR's
-own target branch is used. If the local branch has the same name as the source branch but a different
+own target branch is used. `find-specs.sh --repo "$WORK/wt"` likewise, and
+read the project rule files (`CLAUDE.md`, `docs/code-standards/**`) from
+`$WORK/wt`: `$REPO` may be checked out on an unrelated branch, so a spec or
+rule that exists only on the MR branch is invisible there.
+If the local branch has the same name as the source branch but a different
 sha, warn in the report header: "local <branch> is at <sha>, reviewed MR head
 <sha>". The worktree is removed by `assert-clean.sh --worktree "$WORK/wt"`
 run against the original `$REPO`.
