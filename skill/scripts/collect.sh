@@ -150,7 +150,9 @@ fi
 if [[ $FULL_TESTS -eq 1 ]]; then
   echo "./..." > "$OUT/test-packages.txt"
 elif [[ -s "$OUT/changed-packages.txt" ]]; then
-  (cd "$MODULE_DIR" && go list -f '{{.ImportPath}}{{range .Imports}} {{.}}{{end}}' ./... 2>/dev/null) > "$OUT/tools/import-graph.txt" || true
+  # Test-only importers (integration-test packages, external _test packages)
+  # exercise the changed code too, so include .TestImports and .XTestImports.
+  (cd "$MODULE_DIR" && go list -f '{{.ImportPath}}{{range .Imports}} {{.}}{{end}}{{range .TestImports}} {{.}}{{end}}{{range .XTestImports}} {{.}}{{end}}' ./... 2>/dev/null) > "$OUT/tools/import-graph.txt" || true
   {
     cat "$OUT/changed-packages.txt"
     while read -r p; do awk -v p="$p" '{ for (i = 2; i <= NF; i++) if ($i == p) print $1 }' "$OUT/tools/import-graph.txt"; done < "$OUT/changed-packages.txt"

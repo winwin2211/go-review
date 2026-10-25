@@ -278,4 +278,54 @@ assert_file "$i7out/status-before.txt" "I7: status-before.txt written before the
 assert_file "$i7out/stash-before.txt" "I7: stash-before.txt written before the merge-base computation could fail"
 assert_file "$i7out/status-ignored-before.txt" "I7: status-ignored-before.txt written before the merge-base computation could fail"
 
+# --- packages that import a changed package only from their tests are tested too ---
+ti=$(tmpdir)
+git -C "$ti" init -q -b main
+git -C "$ti" config user.email fixture@example.com
+git -C "$ti" config user.name fixture
+mkdir -p "$ti/a" "$ti/itest" "$ti/b"
+printf 'module example.com/ti\n\ngo 1.22\n' > "$ti/go.mod"
+printf 'package a\n\nfunc Add(x, y int) int { return x + y }\n' > "$ti/a/a.go"
+# itest holds only an internal test file importing a (an integration-test package)
+cat > "$ti/itest/add_test.go" <<'EOF'
+package itest
+
+import (
+	"testing"
+
+	"example.com/ti/a"
+)
+
+func TestAdd(t *testing.T) {
+	if a.Add(1, 2) != 3 {
+		t.Fatal("bad")
+	}
+}
+EOF
+# b's own code never imports a; only its external test package does
+printf 'package b\n\nfunc B() int { return 1 }\n' > "$ti/b/b.go"
+cat > "$ti/b/b_ext_test.go" <<'EOF'
+package b_test
+
+import (
+	"testing"
+
+	"example.com/ti/a"
+)
+
+func TestWithA(t *testing.T) {
+	if a.Add(0, 1) != 1 {
+		t.Fatal("bad")
+	}
+}
+EOF
+git -C "$ti" add -A && git -C "$ti" commit -q -m base
+git -C "$ti" checkout -q -b feature/x
+printf 'package a\n\nfunc Add(x, y int) int { return y + x }\n' > "$ti/a/a.go"
+git -C "$ti" add -A && git -C "$ti" commit -q -m "change a"
+bash "$S/collect.sh" --repo "$ti" --base main --head feature/x --out "$out/ti" --no-tools
+tp=$(cat "$out/ti/test-packages.txt")
+assert_contains "$tp" "example.com/ti/itest" "a package importing the changed package only from internal tests is tested"
+assert_contains "$tp" "example.com/ti/b" "a package importing the changed package only from external tests is tested"
+
 finish
