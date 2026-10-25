@@ -66,6 +66,23 @@ printf -- '--- FAIL: TestPanics (0.00s)\npanic: runtime error: index out of rang
 bash "$S/collect.sh" --classify-only "$out/x/test-panic.txt" > "$out/x/classified-panic.txt"
 assert_contains "$(cat "$out/x/classified-panic.txt")" $'example.com/x/internal/panicky\tFAIL' "a panicking test is FAIL"
 
+# a panic whose message is the environment error (a connect helper's panic(err)
+# with no database, in a test or in TestMain) is an environment ending like any
+# other; shapes recorded from go 1.26.4
+printf -- '--- FAIL: TestRepo (0.00s)\npanic: dial tcp 127.0.0.1:1: connect: connection refused [recovered, repanicked]\n\ngoroutine 4 [running]:\ntesting.tRunner.func1.2({0x1009c9ec0, 0xc000014230})\n\t/usr/local/go/src/testing/testing.go:1974 +0x2b8\nexample.com/x/internal/mustconn.TestRepo(0xc00013e248?)\n\t/repo/internal/mustconn/db_test.go:16 +0x70\nFAIL\texample.com/x/internal/mustconn\t1.258s\n' > "$out/x/test-envpanic.txt"
+printf -- 'panic: dial tcp 127.0.0.1:1: connect: connection refused\n\ngoroutine 1 [running]:\nexample.com/x/internal/mainpanic.TestMain(0xc000114aa0)\n\t/repo/internal/mainpanic/main_test.go:11 +0x80\nmain.main()\n\t_testmain.go:48 +0x108\nFAIL\texample.com/x/internal/mainpanic\t0.844s\n' >> "$out/x/test-envpanic.txt"
+bash "$S/collect.sh" --classify-only "$out/x/test-envpanic.txt" > "$out/x/classified-envpanic.txt"
+assert_contains "$(cat "$out/x/classified-envpanic.txt")" $'example.com/x/internal/mustconn\tNOT_RUNNABLE' "a test that panics on the environment error is NOT_RUNNABLE"
+assert_contains "$(cat "$out/x/classified-envpanic.txt")" $'example.com/x/internal/mainpanic\tNOT_RUNNABLE' "a TestMain that panics on the environment error is NOT_RUNNABLE"
+
+# ... but it never excuses an earlier assertion failure, and go's own test
+# timeout stays FAIL even when the goroutine dump shows a dial in progress
+printf -- '--- FAIL: TestTotal (0.00s)\n    a_test.go:12: total = 2, want 3\n--- FAIL: TestRepo (0.00s)\npanic: dial tcp 127.0.0.1:1: connect: connection refused [recovered, repanicked]\n\ngoroutine 4 [running]:\nFAIL\texample.com/x/internal/mixed\t0.5s\n' > "$out/x/test-envpanic2.txt"
+printf -- 'panic: test timed out after 10s\n\trunning tests:\n\t\tTestDial (10s)\n\ngoroutine 7 [IO wait]:\nexample.com/x/internal/hung.TestDial(0xc000102000)\n\t/repo/internal/hung/a_test.go:9 +0x40 (dial tcp 10.0.0.1:5432)\nFAIL\texample.com/x/internal/hung\t10.4s\n' >> "$out/x/test-envpanic2.txt"
+bash "$S/collect.sh" --classify-only "$out/x/test-envpanic2.txt" > "$out/x/classified-envpanic2.txt"
+assert_contains "$(cat "$out/x/classified-envpanic2.txt")" $'example.com/x/internal/mixed\tFAIL' "an environment panic does not excuse an earlier assertion failure"
+assert_contains "$(cat "$out/x/classified-envpanic2.txt")" $'example.com/x/internal/hung\tFAIL' "go's test-timeout panic is FAIL even when the dump mentions a dial"
+
 # --- refuses to write inside repo ---
 assert_exit 1 bash "$S/collect.sh" --repo "$fx/dirty" --base main --head WORKTREE --out "$fx/dirty/.review"
 

@@ -23,9 +23,12 @@ GO_TEST_TIMEOUT=$((T_TEST - 10)); [[ $GO_TEST_TIMEOUT -lt 1 ]] && GO_TEST_TIMEOU
 # on an environment error. Each `--- FAIL:` block (any nesting) is judged by
 # its last message (`file.go:N: ...` plus continuation lines): environment
 # text there excuses that test; an assertion there makes the package FAIL
-# even if an earlier line logged a connection error. A panic is always FAIL.
-# A package with no `--- FAIL:` block at all (TestMain exited) is judged by
-# any environment line in its output.
+# even if an earlier line logged a connection error. A panic counts as the last
+# message of its test (or of TestMain, outside any test): a connect helper's
+# panic(err) with no database is an environment ending, any other panic (a nil
+# dereference, go's own test timeout) is FAIL. A package with no `--- FAIL:`
+# block at all (TestMain exited) is judged by any environment line in its
+# output.
 classify_tests() {
   awk -v re="$NOT_RUNNABLE_RE" '
     function finish_block() {
@@ -42,7 +45,13 @@ classify_tests() {
     }
     /^[ \t]*--- FAIL: / { finish_block(); in_block = 1; next }
     /^[ \t]*--- (PASS|SKIP): / || /^=== / || /^(FAIL|PASS)$/ { finish_block(); next }
-    /^panic: / { finish_block(); pkg_fail = 1; next }
+    /^panic: / {
+      env = ($0 ~ re)
+      if (in_block) { has_msg = 1; last_env = env; finish_block() }
+      else if (env) pkg_env = 1
+      else pkg_fail = 1
+      next
+    }
     in_block && /^[ \t]+[^ \t]+\.go:[0-9]+: / { has_msg = 1; last_env = ($0 ~ re); next }
     in_block { if ($0 ~ re) last_env = 1; next }
     { if ($0 ~ re) any_env = 1 }

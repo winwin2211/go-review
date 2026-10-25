@@ -71,9 +71,11 @@ Interpretation rules:
 - `NOT_RUNNABLE` packages are reported in the header line only ("3 not runnable
   locally") and never affect the verdict. A failing package is `NOT_RUNNABLE`
   only when every failing test in it ended on an environment error
-  (connection refused, no such host, missing env/config); a test that logged
-  such an error and then failed an assertion, or panicked, makes the package
-  `FAIL`. When in doubt the classifier says `FAIL`, so a `FAIL` whose evidence
+  (connection refused, no such host, missing env/config), a panic whose
+  message is that error included (a `MustConnect`-style helper with no
+  database); a test that logged such an error and then failed an assertion,
+  or panicked on anything else (a nil dereference, go's own test timeout),
+  makes the package `FAIL`. When in doubt the classifier says `FAIL`, so a `FAIL` whose evidence
   is only environment text is for the human to downgrade, never the reverse.
 - `UNAVAILABLE(...)` is reported in the header line; agents must then not
   assume the linter caught anything, so linter-territory issues become fair
