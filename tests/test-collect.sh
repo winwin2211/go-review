@@ -306,6 +306,34 @@ assert_file "$i7out/status-before.txt" "I7: status-before.txt written before the
 assert_file "$i7out/stash-before.txt" "I7: stash-before.txt written before the merge-base computation could fail"
 assert_file "$i7out/status-ignored-before.txt" "I7: status-ignored-before.txt written before the merge-base computation could fail"
 
+# --- a hung test must surface as FAIL with go's own timeout panic, not as UNAVAILABLE(timeout) ---
+source "$S/lib.sh"
+hang=$(tmpdir)
+git -C "$hang" init -q -b main
+git -C "$hang" config user.email fixture@example.com
+git -C "$hang" config user.name fixture
+mkdir -p "$hang/pkg"
+printf 'module example.com/hang\n\ngo 1.22\n' > "$hang/go.mod"
+printf 'package pkg\n\nfunc A() int { return 1 }\n' > "$hang/pkg/a.go"
+git -C "$hang" add -A && git -C "$hang" commit -q -m base
+git -C "$hang" checkout -q -b feature/x
+cat > "$hang/pkg/a_test.go" <<'EOF'
+package pkg
+
+import "testing"
+
+func TestHang(t *testing.T) {
+	select {}
+}
+EOF
+git -C "$hang" add -A && git -C "$hang" commit -q -m "add hanging test"
+hangout=$(tmpdir)
+# cap the whole collect run far below the default 600s test budget so an
+# unfixed collect.sh fails fast instead of stalling the suite
+run_with_timeout 90 "$out/hang-run.txt" env GO_REVIEW_TIMEOUT_TEST=20 bash "$S/collect.sh" --repo "$hang" --base main --head feature/x --out "$hangout" >/dev/null
+assert_contains "$(cat "$hangout/tools/summary.txt" 2>/dev/null)" $'test\tFAIL' "a hung test is reported as test FAIL, not UNAVAILABLE(timeout)"
+assert_contains "$(cat "$hangout/tools/test.txt" 2>/dev/null)" "panic: test timed out" "go's own timeout panic is kept as evidence"
+
 # --- packages that import a changed package only from their tests are tested too ---
 ti=$(tmpdir)
 git -C "$ti" init -q -b main

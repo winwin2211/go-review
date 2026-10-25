@@ -6,6 +6,17 @@ source "$HERE/lib.sh"
 
 NOT_RUNNABLE_RE='connection refused|no such host|dial tcp|i/o timeout|connect: cannot|no route to host|environment variable .* not set|config file not found|open .*\.env: no such file'
 
+# Per-tool budgets in seconds; override with GO_REVIEW_TIMEOUT_<TOOL>. go test
+# gets its own -timeout 10s below the test budget so a hung test dies inside
+# go with a goroutine dump (a FAIL with evidence) before the wrapper gives up
+# and reports UNAVAILABLE(timeout).
+T_BUILD=${GO_REVIEW_TIMEOUT_BUILD:-180}
+T_VET=${GO_REVIEW_TIMEOUT_VET:-180}
+T_LINT=${GO_REVIEW_TIMEOUT_LINT:-300}
+T_TEST=${GO_REVIEW_TIMEOUT_TEST:-600}
+T_VULN=${GO_REVIEW_TIMEOUT_VULN:-180}
+GO_TEST_TIMEOUT=$((T_TEST - 10)); [[ $GO_TEST_TIMEOUT -lt 1 ]] && GO_TEST_TIMEOUT=1
+
 # classify_tests TESTFILE -> lines "pkg<TAB>OK|FAIL|NOT_RUNNABLE|NO_TESTS"
 #
 # A failing package is NOT_RUNNABLE only when every failing test in it ended
@@ -198,29 +209,29 @@ fi
 command -v perl >/dev/null || die "perl not found on PATH"
 
 cd "$MODULE_DIR"
-st=$(run_with_timeout 180 "$OUT/tools/build.txt" go build -o "$OUT/bin/" ./...)
+st=$(run_with_timeout "$T_BUILD" "$OUT/tools/build.txt" go build -o "$OUT/bin/" ./...)
 case $st in
-  TIMEOUT) summary build "UNAVAILABLE(timeout)" "180s" ;;
+  TIMEOUT) summary build "UNAVAILABLE(timeout)" "${T_BUILD}s" ;;
   MISSING) summary build "UNAVAILABLE(missing)" "go not found" ;;
   *) summary build "$st" "$(grep -c . "$OUT/tools/build.txt" || true) lines" ;;
 esac
 
-st=$(run_with_timeout 180 "$OUT/tools/vet.txt" go vet ./...)
+st=$(run_with_timeout "$T_VET" "$OUT/tools/vet.txt" go vet ./...)
 case $st in
-  TIMEOUT) summary vet "UNAVAILABLE(timeout)" "180s" ;;
+  TIMEOUT) summary vet "UNAVAILABLE(timeout)" "${T_VET}s" ;;
   MISSING) summary vet "UNAVAILABLE(missing)" "go not found" ;;
   *) summary vet "$st" "$(grep -c . "$OUT/tools/vet.txt" || true) lines" ;;
 esac
 
 if command -v golangci-lint >/dev/null; then
   if [[ -f .golangci.yml || -f .golangci.yaml || -f .golangci.toml || -f .golangci.json ]]; then
-    st=$(run_with_timeout 300 "$OUT/tools/lint.txt" golangci-lint run --new-from-rev "$MB" ./...)
+    st=$(run_with_timeout "$T_LINT" "$OUT/tools/lint.txt" golangci-lint run --new-from-rev "$MB" ./...)
   else
-    st=$(run_with_timeout 300 "$OUT/tools/lint.txt" golangci-lint run -c "$HERE/golangci-strict.yml" --new-from-rev "$MB" ./...)
+    st=$(run_with_timeout "$T_LINT" "$OUT/tools/lint.txt" golangci-lint run -c "$HERE/golangci-strict.yml" --new-from-rev "$MB" ./...)
   fi
   n=$(grep -cE '^[^ ]+\.go:[0-9]+:[0-9]+:' "$OUT/tools/lint.txt" || true)
   case $st in
-    TIMEOUT) summary lint "UNAVAILABLE(timeout)" "300s" ;;
+    TIMEOUT) summary lint "UNAVAILABLE(timeout)" "${T_LINT}s" ;;
     MISSING) summary lint "UNAVAILABLE(missing)" "golangci-lint not found" ;;
     OK) summary lint OK "0 new" ;;
     *) summary lint FAIL "$n new" ;;
@@ -231,12 +242,12 @@ fi
 
 if [[ -s "$OUT/test-packages.txt" ]]; then
   # shellcheck disable=SC2046
-  st=$(run_with_timeout 600 "$OUT/tools/test.txt" go test -short -race -count=1 -coverprofile="$OUT/tools/cover.out" $(cat "$OUT/test-packages.txt"))
+  st=$(run_with_timeout "$T_TEST" "$OUT/tools/test.txt" go test -short -race -count=1 -timeout "${GO_TEST_TIMEOUT}s" -coverprofile="$OUT/tools/cover.out" $(cat "$OUT/test-packages.txt"))
   classify_tests "$OUT/tools/test.txt" > "$OUT/tools/test-classified.txt"
   if [[ -f "$OUT/tools/cover.out" ]]; then go tool cover -func="$OUT/tools/cover.out" > "$OUT/tools/cover.txt" 2>/dev/null || true; fi
   nf=$(grep -c $'\tFAIL$' "$OUT/tools/test-classified.txt" || true)
   nn=$(grep -c $'\tNOT_RUNNABLE$' "$OUT/tools/test-classified.txt" || true)
-  if [[ $st == TIMEOUT ]]; then summary test "UNAVAILABLE(timeout)" "600s"
+  if [[ $st == TIMEOUT ]]; then summary test "UNAVAILABLE(timeout)" "${T_TEST}s"
   elif [[ $st == MISSING ]]; then summary test "UNAVAILABLE(missing)" "go not found"
   elif [[ $nf -gt 0 ]]; then summary test FAIL "$nf failing, $nn not runnable locally"
   elif [[ $st == FAIL && $nn -eq 0 ]]; then
@@ -252,9 +263,9 @@ else
 fi
 
 if command -v govulncheck >/dev/null; then
-  st=$(run_with_timeout 180 "$OUT/tools/vuln.txt" govulncheck ./...)
+  st=$(run_with_timeout "$T_VULN" "$OUT/tools/vuln.txt" govulncheck ./...)
   case $st in
-    TIMEOUT) summary vuln "UNAVAILABLE(timeout)" "180s" ;;
+    TIMEOUT) summary vuln "UNAVAILABLE(timeout)" "${T_VULN}s" ;;
     MISSING) summary vuln "UNAVAILABLE(missing)" "govulncheck not found" ;;
     *) summary vuln "$st" "$(grep -c 'Vulnerability #' "$OUT/tools/vuln.txt" || true) found" ;;
   esac

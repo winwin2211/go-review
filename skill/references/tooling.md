@@ -89,6 +89,13 @@ outside the guarantee.
 
 ## Timeouts
 
-build 180s, vet 180s, lint 300s, test 600s, vuln 180s. A timeout produces
-`UNAVAILABLE(timeout)`, never `FAIL`. Suggest `--no-tools` or `--full-tests`
-adjustments in the report when a timeout hides evidence.
+build 180s, vet 180s, lint 300s, test 600s, vuln 180s; override any of them
+with `GO_REVIEW_TIMEOUT_BUILD|VET|LINT|TEST|VULN=<seconds>` in the
+environment of `collect.sh`. A wrapper timeout produces `UNAVAILABLE(timeout)`,
+never `FAIL`, and kills every process the tool started. `go test` additionally
+runs with `-timeout` set 10s below the test budget, so a single hung test
+panics inside go (`panic: test timed out`, with a goroutine dump) and is
+classified `FAIL` with that dump as evidence; only a suite whose packages
+together exceed the budget reaches the wrapper timeout. Suggest `--no-tools`,
+`--full-tests`, or a larger `GO_REVIEW_TIMEOUT_TEST` in the report when a
+timeout hides evidence.
