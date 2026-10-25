@@ -38,7 +38,7 @@ assert_exit() { # code cmd...
 
 tmpdir() {
   local d
-  d=$(mktemp -d "${TMPDIR:-/tmp}/go-review-test.XXXXXX")
+  d=$(mktemp -d "${TMPDIR:-/tmp}/${REVIEW_TOOL:-go-review}-test.XXXXXX")
   _TMPDIRS+=("$d")
   printf '%s\n' "$d"
 }

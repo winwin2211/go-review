@@ -15,7 +15,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "$PROJECT" && -n "$MR" && -n "$SHA" && -f "$FINDINGS" && -f "$SUMMARY" ]] || die "usage: gitlab-post.sh --project P --mr IID --head-sha SHA --findings F.json --summary S.md [--dry-run]"
 PROJ=$(printf '%s' "$PROJECT" | sed 's#/#%2F#g')
-MARKER="<!-- go-review:$SHA -->"
+MARKER="<!-- ${REVIEW_TOOL}:$SHA -->"
 BASE_EP="projects/$PROJ/merge_requests/$MR"
 
 api_get() { glab api "$1"; }

@@ -65,6 +65,11 @@ assert_not_contains "$out" "Spec: null" "a finding with no spec_ref does not ren
 assert_eq "1" "$(grep -c 'DRY: POST.*discussions' <<<"$out" || true)" "only the line>0, in-diff finding is posted inline"
 assert_eq "0" "$(grep -c '^api --method POST' "$w/calls.log" || true)" "no real POST in dry run"
 
+# the marker carries REVIEW_TOOL so a sibling skill's notes never collide with ours
+out=$(REVIEW_TOOL=nodejs-review bash "$S/gitlab-post.sh" --project group/repo --mr 7 --head-sha h1 --findings "$w/findings.json" --summary "$w/summary.md" --dry-run)
+assert_contains "$out" "<!-- nodejs-review:h1 -->" "marker uses REVIEW_TOOL"
+assert_not_contains "$out" "go-review:h1" "marker does not fall back to go-review when REVIEW_TOOL is set"
+
 # real (fake) post: 1 note + 1 discussion
 : > "$w/calls.log"
 bash "$S/gitlab-post.sh" --project group/repo --mr 7 --head-sha h1 --findings "$w/findings.json" --summary "$w/summary.md" >/dev/null

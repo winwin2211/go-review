@@ -97,9 +97,13 @@ ignored-file status, and the stash list before and after the run, and lists
 every file under the repo whose mtime is newer than the marker `collect.sh`
 wrote at its start (so a rewritten already-modified file, or a new file
 inside an untracked or ignored directory, is caught even though `git status`
-looks the same). Outside the guarantee: `.git` internal writes made by `git
-fetch` or worktree add/remove (updated remote-tracking refs, packed-refs,
-reflog entries), and a write that restores the file's previous mtime. A file
+looks the same). Directories named in `ASSERT_CLEAN_PRUNE` (colon-separated
+basenames, default none) are pruned from that scan along with `.git`;
+sibling skills use it for tool-cache directories such as `node_modules`, and
+go-review leaves it empty. Outside the guarantee: `.git` internal writes
+made by `git fetch` or worktree add/remove (updated remote-tracking refs,
+packed-refs, reflog entries), and a write that restores the file's previous
+mtime. A file
 the user edits while the review runs is also listed; the banner says so and
 leaves the judgment to the user.
 

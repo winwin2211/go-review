@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Shared helpers for go-review scripts. Source this file.
+#
+# This file is shared byte-for-byte with sibling review skills; anything that
+# differs between them goes through REVIEW_TOOL (log prefix, MR marker, test
+# tmpdir prefix), never through an edit.
+REVIEW_TOOL=${REVIEW_TOOL:-go-review}
 
-die() { printf 'go-review: %s\n' "$*" >&2; exit 1; }
-log() { printf 'go-review: %s\n' "$*" >&2; }
+die() { printf '%s: %s\n' "$REVIEW_TOOL" "$*" >&2; exit 1; }
+log() { printf '%s: %s\n' "$REVIEW_TOOL" "$*" >&2; }
 
 # run_with_timeout SECONDS OUTFILE CMD... -> prints OK | FAIL | TIMEOUT | MISSING
 #

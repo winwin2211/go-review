@@ -23,6 +23,10 @@ n=$(pgrep -f "$marker" | wc -l | tr -d ' ')
 pkill -f "$marker" 2>/dev/null || true
 assert_eq "0" "$n" "no process spawned by the timed-out command survives the timeout"
 
+# --- die/log prefix comes from REVIEW_TOOL, default go-review ---
+r=$( (REVIEW_TOOL=other-review; die "boom") 2>&1 ); assert_eq "other-review: boom" "$r" "die uses REVIEW_TOOL as prefix"
+r=$( (die "boom") 2>&1 ); assert_eq "go-review: boom" "$r" "die prefix defaults to go-review"
+
 # --- assert_outside: nonexistent multi-level paths must still resolve correctly ---
 root=$(tmpdir)
 outside=$(tmpdir)

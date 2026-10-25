@@ -53,9 +53,14 @@ diff "$OUT/status-ignored-before.txt" <(git -C "$REPO" status --porcelain --igno
 # `git status` cannot distinguish from the baseline: an already-modified file
 # rewritten, or a new file inside a directory that was already untracked or
 # ignored. .git is pruned: index and ref updates by git itself are not
-# artifacts.
+# artifacts. ASSERT_CLEAN_PRUNE (colon-separated directory basenames, default
+# none) prunes more: sibling skills name tool-cache directories such as
+# node_modules there.
 repo_real=$(cd "$REPO" && pwd -P)
-find "$repo_real" -name .git -prune -o \( -type f -o -type l \) -newer "$OUT/mtime-marker" -print 2>/dev/null |
+prune=(-name .git)
+IFS=: read -r -a extra <<<"${ASSERT_CLEAN_PRUNE:-}"
+for d in "${extra[@]:-}"; do [[ -n "$d" ]] && prune+=(-o -name "$d"); done
+find "$repo_real" \( "${prune[@]}" \) -prune -o \( -type f -o -type l \) -newer "$OUT/mtime-marker" -print 2>/dev/null |
   awk -v p="$repo_real/" 'index($0, p) == 1 { print substr($0, length(p) + 1) }' | sort > "$OUT/mtime-diff.txt"
 [[ -s "$OUT/mtime-diff.txt" ]] && rc=2
 if [[ $rc -eq 0 ]]; then echo "No artifacts left: verified"; exit 0; fi

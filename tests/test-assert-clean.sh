@@ -104,6 +104,18 @@ r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_c" 2>&1 || true)
 assert_contains "$r" "tmpbuild/b.bin" "a file written inside a pre-existing ignored directory is caught"
 rm -rf "$fx/clean/tmpbuild"
 
+# (d) writes under node_modules (tool caches) are pruned from the mtime scan
+# only when ASSERT_CLEAN_PRUNE names the directory
+mkdir -p "$fx/clean/node_modules"; echo x > "$fx/clean/node_modules/x.js"
+out_d=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_d" --no-tools
+mkdir -p "$fx/clean/node_modules/.vite"; echo '{}' > "$fx/clean/node_modules/.vite/results.json"
+r=$(ASSERT_CLEAN_PRUNE=node_modules bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_d")
+assert_eq "No artifacts left: verified" "$r" "ASSERT_CLEAN_PRUNE=node_modules hides writes under node_modules"
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_d" 2>&1 || true)
+assert_contains "$r" "node_modules/.vite/results.json" "without ASSERT_CLEAN_PRUNE a write under node_modules is caught"
+rm -rf "$fx/clean/node_modules"
+
 # and a run that writes nothing is still verified after all of the above
 out_ok=$(tmpdir)
 bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_ok" --no-tools
