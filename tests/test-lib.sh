@@ -14,6 +14,15 @@ assert_eq "FAIL" "$r" "a binary that exits nonzero reports FAIL"
 r=$(run_with_timeout 5 "$out/ok.txt" true)
 assert_eq "OK" "$r" "a binary that exits zero reports OK"
 
+# --- run_with_timeout: a timeout kills everything the command spawned, not only the direct child ---
+marker="gr-timeout-marker-$$"
+r=$(run_with_timeout 1 "$out/timeout.txt" bash -c "perl -e 'sleep 30' $marker & wait")
+assert_eq "TIMEOUT" "$r" "a command that outlives its budget reports TIMEOUT"
+sleep 1
+n=$(pgrep -f "$marker" | wc -l | tr -d ' ')
+pkill -f "$marker" 2>/dev/null || true
+assert_eq "0" "$n" "no process spawned by the timed-out command survives the timeout"
+
 # --- assert_outside: nonexistent multi-level paths must still resolve correctly ---
 root=$(tmpdir)
 outside=$(tmpdir)

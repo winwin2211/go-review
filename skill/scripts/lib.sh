@@ -5,10 +5,31 @@ die() { printf 'go-review: %s\n' "$*" >&2; exit 1; }
 log() { printf 'go-review: %s\n' "$*" >&2; }
 
 # run_with_timeout SECONDS OUTFILE CMD... -> prints OK | FAIL | TIMEOUT | MISSING
+#
+# The command runs in its own process group under a perl supervisor. On
+# timeout the whole group gets TERM, then KILL five seconds later, so
+# processes the command spawned (go test's test binaries, for instance) die
+# with it instead of running on after the review has finished. A plain
+# `alarm; exec` would only kill the direct child.
 run_with_timeout() {
   local secs=$1 out=$2; shift 2
   local rc=0
-  perl -e 'alarm shift; exec @ARGV or exit 127' "$secs" "$@" >"$out" 2>&1 || rc=$?
+  perl -e '
+    my $secs = shift @ARGV;
+    my $pid = fork;
+    exit 127 unless defined $pid;
+    if ($pid == 0) { setpgrp(0, 0); exec @ARGV or exit 127 }
+    my $timed_out = 0;
+    $SIG{ALRM} = sub { $timed_out++; kill($timed_out == 1 ? "TERM" : "KILL", -$pid); alarm 5 };
+    $SIG{TERM} = $SIG{INT} = $SIG{HUP} = sub { kill "TERM", -$pid; exit 143 };
+    alarm $secs;
+    my $w;
+    do { $w = waitpid($pid, 0) } while ($w == -1 && $!{EINTR});
+    my $st = $?;
+    kill "KILL", -$pid;
+    exit 142 if $timed_out;
+    exit(($st & 127) ? 128 + ($st & 127) : $st >> 8);
+  ' "$secs" "$@" >"$out" 2>&1 || rc=$?
   if [[ $rc -eq 142 ]]; then echo TIMEOUT
   elif [[ $rc -eq 127 ]]; then echo MISSING
   elif [[ $rc -eq 0 ]]; then echo OK
