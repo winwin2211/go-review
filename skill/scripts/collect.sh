@@ -7,12 +7,34 @@ source "$HERE/lib.sh"
 NOT_RUNNABLE_RE='connection refused|no such host|dial tcp|i/o timeout|connect: cannot|no route to host|environment variable .* not set|config file not found|open .*\.env: no such file'
 
 # classify_tests TESTFILE -> lines "pkg<TAB>OK|FAIL|NOT_RUNNABLE|NO_TESTS"
+#
+# A failing package is NOT_RUNNABLE only when every failing test in it ended
+# on an environment error. Each `--- FAIL:` block (any nesting) is judged by
+# its last message (`file.go:N: ...` plus continuation lines): environment
+# text there excuses that test; an assertion there makes the package FAIL
+# even if an earlier line logged a connection error. A panic is always FAIL.
+# A package with no `--- FAIL:` block at all (TestMain exited) is judged by
+# any environment line in its output.
 classify_tests() {
   awk -v re="$NOT_RUNNABLE_RE" '
-    { if ($0 ~ re) nr = 1 }
-    /^ok[ \t]/   { print $2 "\tOK"; nr = 0 }
-    /^FAIL[ \t]+[^ \t]+[ \t]/ { print $2 "\t" (nr ? "NOT_RUNNABLE" : "FAIL"); nr = 0 }
-    /^\?[ \t]/   { print $2 "\tNO_TESTS"; nr = 0 }
+    function finish_block() {
+      if (in_block && has_msg) { if (last_env) pkg_env = 1; else pkg_fail = 1 }
+      in_block = 0; has_msg = 0; last_env = 0
+    }
+    function reset_pkg() { finish_block(); pkg_fail = 0; pkg_env = 0; any_env = 0 }
+    /^ok[ \t]/ { reset_pkg(); print $2 "\tOK"; next }
+    /^\?[ \t]/ { reset_pkg(); print $2 "\tNO_TESTS"; next }
+    /^FAIL[ \t]+[^ \t]+[ \t]/ {
+      finish_block()
+      st = pkg_fail ? "FAIL" : ((pkg_env || any_env) ? "NOT_RUNNABLE" : "FAIL")
+      print $2 "\t" st; reset_pkg(); next
+    }
+    /^[ \t]*--- FAIL: / { finish_block(); in_block = 1; next }
+    /^[ \t]*--- (PASS|SKIP): / || /^=== / || /^(FAIL|PASS)$/ { finish_block(); next }
+    /^panic: / { finish_block(); pkg_fail = 1; next }
+    in_block && /^[ \t]+[^ \t]+\.go:[0-9]+: / { has_msg = 1; last_env = ($0 ~ re); next }
+    in_block { if ($0 ~ re) last_env = 1; next }
+    { if ($0 ~ re) any_env = 1 }
   ' "$1"
 }
 

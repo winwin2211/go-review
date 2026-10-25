@@ -38,6 +38,34 @@ bash "$S/collect.sh" --classify-only "$out/x/test.txt" > "$out/x/classified.txt"
 assert_contains "$(cat "$out/x/classified.txt")" $'example.com/x/internal/db\tNOT_RUNNABLE' "connection refused -> not runnable"
 assert_contains "$(cat "$out/x/classified.txt")" $'example.com/x/internal/ok\tOK' "ok package"
 
+# a test that logs an environment error but then fails an assertion is a real
+# FAIL: the environment line alone must not excuse the package
+printf -- '--- FAIL: TestRetryGivesUp (0.00s)\n    retry_test.go:6: attempt 1: dial tcp 127.0.0.1:9: connect: connection refused\n    retry_test.go:7: attempts = 2, want 3\nFAIL\nFAIL\texample.com/x/internal/retry\t0.1s\n' > "$out/x/test-retry.txt"
+bash "$S/collect.sh" --classify-only "$out/x/test-retry.txt" > "$out/x/classified-retry.txt"
+assert_contains "$(cat "$out/x/classified-retry.txt")" $'example.com/x/internal/retry\tFAIL' "assertion failure after an environment log line is FAIL"
+
+# subtests: one environment-caused subtest does not excuse a sibling's assertion failure
+printf -- '--- FAIL: TestParent (0.00s)\n    --- FAIL: TestParent/db (0.00s)\n        db_test.go:8: dial tcp 127.0.0.1:5432: connect: connection refused\n    --- FAIL: TestParent/logic (0.00s)\n        db_test.go:12: got 1, want 2\nFAIL\nFAIL\texample.com/x/internal/sub\t0.1s\n' > "$out/x/test-sub.txt"
+bash "$S/collect.sh" --classify-only "$out/x/test-sub.txt" > "$out/x/classified-sub.txt"
+assert_contains "$(cat "$out/x/classified-sub.txt")" $'example.com/x/internal/sub\tFAIL' "a sibling subtest's assertion failure is FAIL"
+
+# testify-style failure: the environment error sits in a continuation line of
+# the single message, so the package is NOT_RUNNABLE
+printf -- '--- FAIL: TestDB (0.00s)\n    db_test.go:15: \n        \tError Trace:\tdb_test.go:15\n        \tError:      \tReceived unexpected error:\n        \t            \tdial tcp 127.0.0.1:5432: connect: connection refused\n        \tTest:       \tTestDB\nFAIL\nFAIL\texample.com/x/internal/tdb\t0.1s\n' > "$out/x/test-testify.txt"
+bash "$S/collect.sh" --classify-only "$out/x/test-testify.txt" > "$out/x/classified-testify.txt"
+assert_contains "$(cat "$out/x/classified-testify.txt")" $'example.com/x/internal/tdb\tNOT_RUNNABLE' "testify-style environment failure is NOT_RUNNABLE"
+
+# TestMain exiting before any test runs: no --- FAIL block at all, only the
+# environment line, so the package is NOT_RUNNABLE
+printf -- 'setup: dial tcp 127.0.0.1:5432: connect: connection refused\nFAIL\texample.com/x/internal/mainfail\t1.3s\n' > "$out/x/test-main.txt"
+bash "$S/collect.sh" --classify-only "$out/x/test-main.txt" > "$out/x/classified-main.txt"
+assert_contains "$(cat "$out/x/classified-main.txt")" $'example.com/x/internal/mainfail\tNOT_RUNNABLE' "TestMain environment exit is NOT_RUNNABLE"
+
+# a panicking test is FAIL even when the goroutine dump mentions nothing environmental
+printf -- '--- FAIL: TestPanics (0.00s)\npanic: runtime error: index out of range [3] with length 0 [recovered, repanicked]\n\ngoroutine 6 [running]:\ntesting.tRunner.func1.2(...)\nFAIL\texample.com/x/internal/panicky\t0.9s\n' > "$out/x/test-panic.txt"
+bash "$S/collect.sh" --classify-only "$out/x/test-panic.txt" > "$out/x/classified-panic.txt"
+assert_contains "$(cat "$out/x/classified-panic.txt")" $'example.com/x/internal/panicky\tFAIL' "a panicking test is FAIL"
+
 # --- refuses to write inside repo ---
 assert_exit 1 bash "$S/collect.sh" --repo "$fx/dirty" --base main --head WORKTREE --out "$fx/dirty/.review"
 
