@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Verify the reviewed repo is unchanged after a go-review run.
+#
+# Exit 0: unchanged (prints the verified line). 1: the check could not run.
+# 2: git status, the ignored status or the stash list changed. 3: only the
+# mtime scan found writes, which git cannot attribute to anyone.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 usage="usage: assert-clean.sh --repo R --out O [--worktree W]"
@@ -55,22 +59,32 @@ diff "$OUT/status-ignored-before.txt" <(git -C "$REPO" status --porcelain --igno
 # ignored. .git is pruned: index and ref updates by git itself are not
 # artifacts. ASSERT_CLEAN_PRUNE (colon-separated directory basenames, default
 # none) prunes more: sibling skills name tool-cache directories such as
-# node_modules there.
+# node_modules there. Who wrote these files is unknown: the repo's tests, the
+# user's editor, or a process running from the repo (a service's log, an IDE's
+# settings) all look the same. Alone they exit 3, never 2, so they reach the
+# user as writes to check, not as artifacts to remove.
 repo_real=$(cd "$REPO" && pwd -P)
 prune=(-name .git)
 IFS=: read -r -a extra <<<"${ASSERT_CLEAN_PRUNE:-}"
 for d in "${extra[@]:-}"; do [[ -n "$d" ]] && prune+=(-o -name "$d"); done
 find "$repo_real" \( "${prune[@]}" \) -prune -o \( -type f -o -type l \) -newer "$OUT/mtime-marker" -print 2>/dev/null |
   awk -v p="$repo_real/" 'index($0, p) == 1 { print substr($0, length(p) + 1) }' | sort > "$OUT/mtime-diff.txt"
-[[ -s "$OUT/mtime-diff.txt" ]] && rc=2
-if [[ $rc -eq 0 ]]; then echo "No artifacts left: verified"; exit 0; fi
+if [[ $rc -eq 0 && ! -s "$OUT/mtime-diff.txt" ]]; then echo "No artifacts left: verified"; exit 0; fi
+writers="the repo's own tests, your editor, or a process running from the repo (logs, IDE settings, local data)"
 {
-  echo "THE REVIEWED REPO CHANGED DURING THE RUN."
-  echo "The repo's own test suite is the most likely cause. These paths need checking by hand:"
-  cat "$OUT/status-diff.txt" "$OUT/stash-diff.txt" "$OUT/status-ignored-diff.txt"
-  if [[ -s "$OUT/mtime-diff.txt" ]]; then
-    echo "Written after the run started (mtime newer than the start marker):"
+  if [[ $rc -eq 2 ]]; then
+    echo "THE REVIEWED REPO CHANGED DURING THE RUN."
+    echo "The repo's own test suite is the most likely cause. These paths need checking by hand:"
+    cat "$OUT/status-diff.txt" "$OUT/stash-diff.txt" "$OUT/status-ignored-diff.txt"
+    if [[ -s "$OUT/mtime-diff.txt" ]]; then
+      echo "Also written after the run started (mtime newer than the start marker); git status cannot tell who wrote these: $writers:"
+      cat "$OUT/mtime-diff.txt"
+    fi
+  else
+    echo "FILES IN THE REVIEWED REPO WERE WRITTEN DURING THE RUN."
+    echo "git status is unchanged, so this check cannot tell who wrote them: $writers. Check them before removing anything:"
     cat "$OUT/mtime-diff.txt"
   fi
 } >&2
-exit 2
+[[ $rc -eq 2 ]] && exit 2
+exit 3

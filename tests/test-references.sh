@@ -27,6 +27,13 @@ for a in correctness security architecture performance sdd-tdd verifier; do
   grep -q "go-review-$a" "$SK/references/workflow.md" && pass || fail "workflow names agent $a"
 done
 
+# assert-clean exit 3 (writes git status cannot attribute: the user's editor,
+# a service's log) is reported as such, never as files to remove
+exit3=$(awk '/assert-clean.sh` exits 3/,/^$/' "$SK/references/workflow.md")
+assert_contains "$exit3" "WRITTEN DURING THE RUN" "workflow.md gives assert-clean exit 3 its own heading"
+assert_contains "$exit3" "never tell the user to remove them" "workflow.md never has the user remove unattributed writes"
+grep -qF 'exits 3 instead of 2' "$SK/references/tooling.md" && pass || fail "tooling.md explains when assert-clean exits 3"
+
 # SKILL.md frontmatter
 head -1 "$SK/SKILL.md" | grep -q '^---$' && pass || fail "frontmatter start"
 grep -q '^name: go-review$' "$SK/SKILL.md" && pass || fail "name"

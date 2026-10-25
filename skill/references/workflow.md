@@ -123,7 +123,7 @@ bash "$SKILL/scripts/assert-clean.sh" --repo "$REPO" --out "$WORK" [--worktree "
 rm -rf "$WORK"
 ```
 
-`rm -rf "$WORK"` always runs, even when `assert-clean.sh` exits 2 — `$WORK` is
+`rm -rf "$WORK"` always runs, even when `assert-clean.sh` exits 2 or 3 — `$WORK` is
 this skill's own scratch directory, not part of the reviewed repo, so removing
 it is always safe.
 
@@ -131,6 +131,16 @@ Print the `No artifacts left: verified` line as the last line of the report.
 If `assert-clean.sh` exits 2, print its output verbatim under a heading
 `ARTIFACTS LEFT` and tell the user which files to remove from the reviewed
 repo; do not remove those yourself.
+
+If `assert-clean.sh` exits 3, `git status` is unchanged and only files
+written during the run were found: the repo's tests may have written them,
+or the user's editor, or a process running from the repo (a service's log,
+an IDE's settings). Print its output verbatim under a heading
+`WRITTEN DURING THE RUN`, say that the review cannot tell who wrote them,
+and ask the user to check them; never tell the user to remove them, never
+remove them yourself, and end the report with
+`No artifacts left: not verified (files written during the run, see above)`
+instead of the verified line.
 
 If `assert-clean.sh` exits 1 (it could not even run the check — e.g. a
 missing baseline file because collection aborted before writing one, or a

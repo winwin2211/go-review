@@ -105,9 +105,12 @@ sibling skills use it for tool-cache directories such as `node_modules`, and
 go-review leaves it empty. Outside the guarantee: `.git` internal writes
 made by `git fetch` or worktree add/remove (updated remote-tracking refs,
 packed-refs, reflog entries), and a write that restores the file's previous
-mtime. A file
-the user edits while the review runs is also listed; the banner says so and
-leaves the judgment to the user.
+mtime. Anything else that writes inside the repo while the review runs is
+listed too: the user's editor, a service logging into the repo, an IDE. When
+`git status` is otherwise unchanged the script cannot tell those writes from
+a test's, so it exits 3 instead of 2 and its banner says who may have written
+them; workflow.md (step 6) reports them as writes to check, never as files to
+remove.
 
 ## Timeouts
 

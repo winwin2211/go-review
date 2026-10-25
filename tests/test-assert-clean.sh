@@ -116,6 +116,37 @@ r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_d" 2>&1 || true)
 assert_contains "$r" "node_modules/.vite/results.json" "without ASSERT_CLEAN_PRUNE a write under node_modules is caught"
 rm -rf "$fx/clean/node_modules"
 
+# (e) a service running from the repo appends to its gitignored log and the
+# IDE rewrites its settings while the review runs. git status is unchanged, so
+# the check cannot tell these writes from a test's: it lists them, says who
+# might have written them, and exits 3 (2 means git status proves a change)
+echo '/logs/' >> "$fx/clean/.gitignore"; echo '/.idea/' >> "$fx/clean/.gitignore"
+git -C "$fx/clean" add .gitignore && git -C "$fx/clean" commit -q -m "ignore logs and ide"
+mkdir -p "$fx/clean/logs" "$fx/clean/.idea"; echo start > "$fx/clean/logs/app.log"; echo '<x/>' > "$fx/clean/.idea/workspace.xml"
+out_e=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_e" --no-tools
+echo 'GET /health 200' >> "$fx/clean/logs/app.log"; echo '<x a="1"/>' > "$fx/clean/.idea/workspace.xml"
+assert_exit 3 bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_e"
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_e" 2>&1 || true)
+assert_contains "$r" "logs/app.log" "(e) a write git status cannot see is listed"
+assert_contains "$r" ".idea/workspace.xml" "(e) every such write is listed"
+assert_contains "$r" "cannot tell who wrote" "(e) the banner says the writer is unknown"
+assert_contains "$r" "your editor" "(e) the banner names the user's own edits as a possible writer"
+assert_not_contains "$r" "most likely cause" "(e) the banner does not blame the repo's test suite"
+assert_not_contains "$r" "verified" "(e) unattributed writes are not verified"
+
+# (f) a change git status does prove still exits 2 and keeps its banner; the
+# unattributed writes beside it keep their own label
+out_f=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_f" --no-tools
+touch "$fx/clean/stray-f.txt"; echo 'GET /ready 200' >> "$fx/clean/logs/app.log"
+assert_exit 2 bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_f"
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_f" 2>&1 || true)
+assert_contains "$r" "stray-f.txt" "(f) the change git status proves is listed"
+assert_contains "$r" "most likely cause" "(f) a proven change keeps the test-suite banner"
+assert_contains "$r" "cannot tell who wrote" "(f) the log write is labelled as unattributed"
+rm -f "$fx/clean/stray-f.txt"; rm -rf "$fx/clean/logs" "$fx/clean/.idea"
+
 # and a run that writes nothing is still verified after all of the above
 out_ok=$(tmpdir)
 bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_ok" --no-tools
