@@ -17,6 +17,11 @@ T_VET=${GO_REVIEW_TIMEOUT_VET:-180}
 T_LINT=${GO_REVIEW_TIMEOUT_LINT:-300}
 T_TEST=${GO_REVIEW_TIMEOUT_TEST:-600}
 T_VULN=${GO_REVIEW_TIMEOUT_VULN:-180}
+# Whole seconds only: perl's alarm reads "3m" as 3 and 0 as no timeout at all.
+for v in BUILD VET LINT TEST VULN; do
+  n="GO_REVIEW_TIMEOUT_$v"
+  [[ -z "${!n:-}" || "${!n}" =~ ^[1-9][0-9]*$ ]] || die "$n must be whole seconds (at least 1), got '${!n}'"
+done
 GO_TEST_MARGIN=$((T_TEST / 4)); [[ $GO_TEST_MARGIN -lt 10 ]] && GO_TEST_MARGIN=10
 GO_TEST_TIMEOUT=$((T_TEST - GO_TEST_MARGIN)); [[ $GO_TEST_TIMEOUT -lt 1 ]] && GO_TEST_TIMEOUT=1
 
@@ -31,7 +36,8 @@ GO_TEST_TIMEOUT=$((T_TEST - GO_TEST_MARGIN)); [[ $GO_TEST_TIMEOUT -lt 1 ]] && GO
 # panic(err) with no database is an environment ending, any other panic (a nil
 # dereference, go's own test timeout) is FAIL. A package with no `--- FAIL:`
 # block at all (TestMain exited) is judged by any environment line in its
-# output.
+# output. A report's continuation lines are indented; an unindented line is
+# raw stderr from a later test and ends the block, excusing nothing.
 classify_tests() {
   awk -v re="$NOT_RUNNABLE_RE" '
     function finish_block() {
@@ -56,7 +62,8 @@ classify_tests() {
       next
     }
     in_block && /^[ \t]+[^ \t]+\.go:[0-9]+: / { has_msg = 1; last_env = ($0 ~ re); next }
-    in_block { if ($0 ~ re) last_env = 1; next }
+    in_block && /^[ \t]/ { if ($0 ~ re) last_env = 1; next }
+    in_block { finish_block() }
     { if ($0 ~ re) any_env = 1 }
   ' "$1"
 }
@@ -227,7 +234,12 @@ fi
 command -v perl >/dev/null || die "perl not found on PATH"
 
 cd "$MODULE_DIR"
-st=$(run_with_timeout "$T_BUILD" "$OUT/tools/build.txt" go build -o "$OUT/bin/" ./...)
+# go build -o DIR/ refuses a module without a main package ("no main packages
+# to build"), and without -o a lone main package writes its binary into the
+# repo: write binaries to $OUT only when there is a main package to build.
+build=(go build ./...)
+[[ -n "$(go list -e -f '{{if eq .Name "main"}}main{{end}}' ./... 2>/dev/null)" ]] && build=(go build -o "$OUT/bin/" ./...)
+st=$(run_with_timeout "$T_BUILD" "$OUT/tools/build.txt" "${build[@]}")
 case $st in
   TIMEOUT) summary build "UNAVAILABLE(timeout)" "${T_BUILD}s" ;;
   MISSING) summary build "UNAVAILABLE(missing)" "go not found" ;;

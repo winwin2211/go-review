@@ -83,6 +83,22 @@ bash "$S/collect.sh" --classify-only "$out/x/test-envpanic2.txt" > "$out/x/class
 assert_contains "$(cat "$out/x/classified-envpanic2.txt")" $'example.com/x/internal/mixed\tFAIL' "an environment panic does not excuse an earlier assertion failure"
 assert_contains "$(cat "$out/x/classified-envpanic2.txt")" $'example.com/x/internal/hung\tFAIL' "go's test-timeout panic is FAIL even when the dump mentions a dial"
 
+# raw stderr of a later test (log.Printf from the code under test, a client's
+# reconnect message) prints unindented after an earlier test's --- FAIL report;
+# it is not part of that report, so its environment text excuses nothing
+printf -- '--- FAIL: TestTotal (0.00s)\n    a_test.go:12: total = 2, want 3\n2026/10/25 23:51:24 cache unavailable, falling back: dial tcp 127.0.0.1:1: connect: connection refused\nFAIL\nFAIL\texample.com/x/internal/logafter\t0.418s\n' > "$out/x/test-logafter.txt"
+bash "$S/collect.sh" --classify-only "$out/x/test-logafter.txt" > "$out/x/classified-logafter.txt"
+assert_contains "$(cat "$out/x/classified-logafter.txt")" $'example.com/x/internal/logafter\tFAIL' "an unindented log line after a FAIL report does not excuse its assertion"
+
+# a budget that is not whole seconds (or is 0, which perl's alarm reads as no
+# timeout at all) is a usage error named up front, not a crash halfway
+# through the tools or a silent 3-second budget for "3m"
+for bad in 20m 0; do
+  r=$(GO_REVIEW_TIMEOUT_TEST=$bad bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out/badbudget" --no-tools 2>&1); rc=$?
+  assert_eq "1" "$rc" "GO_REVIEW_TIMEOUT_TEST=$bad exits 1"
+  assert_contains "$r" "GO_REVIEW_TIMEOUT_TEST must be whole seconds" "GO_REVIEW_TIMEOUT_TEST=$bad is named in the error"
+done
+
 # --- refuses to write inside repo ---
 assert_exit 1 bash "$S/collect.sh" --repo "$fx/dirty" --base main --head WORKTREE --out "$fx/dirty/.review"
 
@@ -346,6 +362,10 @@ func TestHang(t *testing.T) {
 EOF
 git -C "$hang" add -A && git -C "$hang" commit -q -m "add hanging test"
 hangout=$(tmpdir)
+# warm the race and coverage build of the test binary (same build flags as
+# collect.sh, no test run) so the timed run below spends its 10s margin on
+# linking, not on a cold compile of the race runtime on a loaded machine
+(cd "$hang" && go test -race -count=1 -coverprofile="$hangout/warm.out" -run '^$' ./... >/dev/null 2>&1)
 # cap the whole collect run far below the default 600s test budget so an
 # unfixed collect.sh fails fast instead of stalling the suite
 run_with_timeout 90 "$out/hang-run.txt" env GO_REVIEW_TIMEOUT_TEST=20 bash "$S/collect.sh" --repo "$hang" --base main --head feature/x --out "$hangout" >/dev/null
@@ -377,6 +397,10 @@ for budget in 600:450s 20:10s; do
   PATH="$stub:$PATH" GO_REVIEW_TIMEOUT_TEST=${budget%%:*} bash "$S/collect.sh" --repo "$tmo" --base main --head feature/x --out "$tmoout" >/dev/null 2>&1
   assert_eq "${budget#*:}" "$(grep -A1 -x -- '-timeout' "$stub/go-test-args.txt" 2>/dev/null | tail -1)" "a ${budget%%:*}s test budget gives go test -timeout ${budget#*:}"
 done
+# the module has no main package: go build -o DIR/ refuses that ("no main
+# packages to build"), which used to make every library review a build BLOCKER
+assert_contains "$(cat "$tmoout/tools/summary.txt" 2>/dev/null)" $'build\tOK' "a library-only module builds OK, not FAIL"
+assert_eq "" "$(git -C "$tmo" status --porcelain)" "building a library-only module writes nothing into the repo"
 
 # --- packages that import a changed package only from their tests are tested too ---
 ti=$(tmpdir)

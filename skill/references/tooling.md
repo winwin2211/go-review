@@ -116,7 +116,9 @@ remove.
 
 build 180s, vet 180s, lint 300s, test 600s, vuln 180s; override any of them
 with `GO_REVIEW_TIMEOUT_BUILD|VET|LINT|TEST|VULN=<seconds>` in the
-environment of `collect.sh`. A wrapper timeout produces `UNAVAILABLE(timeout)`,
+environment of `collect.sh` (whole seconds, at least 1; anything else, such
+as `20m` or `0`, makes `collect.sh` exit 1 naming the variable before it
+touches the repo). A wrapper timeout produces `UNAVAILABLE(timeout)`,
 never `FAIL`, and kills every process the tool started. `go test` additionally
 runs with `-timeout` set a quarter of the test budget (at least 10s) below
 it: 450s by default. go's clock starts with each test binary and the
