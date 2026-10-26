@@ -57,6 +57,12 @@ grep -qF 'not checked out' "$SK/references/tooling.md" && pass || fail "tooling.
 grep -q 'one fix removes both' "$SK/references/severity-verdict.md" && pass || fail "dedup merges only findings with one root cause"
 grep -q 'same file and line' "$SK/references/severity-verdict.md" && fail "dedup still merges any two findings on one line" || pass
 
+# the verifier re-reads the reviewed tree (the worktree when there is one)
+# and gets the work dir its tool-fact checks read from
+step4=$(awk '/^## 4\. /,/^## 5\. /' "$SK/references/workflow.md")
+assert_contains "$step4" 'Repo: <REVIEW_REPO>' "the verifier prompt names the reviewed tree"
+assert_contains "$step4" 'Work dir: <WORK>' "the verifier prompt names the work dir"
+
 # SKILL.md frontmatter
 head -1 "$SK/SKILL.md" | grep -q '^---$' && pass || fail "frontmatter start"
 grep -q '^name: go-review$' "$SK/SKILL.md" && pass || fail "name"

@@ -100,10 +100,14 @@ build/vet FAIL, any package `FAIL` in test-classified, `DATA RACE` in
 ## 4. Verify
 
 Group `findings-raw.json` by `file`. Dispatch `go-review-verifier` agents,
-one per group of up to 8 files, in one message. Each prompt contains: repo
-path, skill dir, the findings for its files (JSON), and:
+one per group of up to 8 files, in one message. Each prompt contains the
+findings for its files (JSON) and, verbatim (`Repo` is the tree the
+reviewers read, so the code re-read is the code reviewed):
 
 ```
+Repo: <REVIEW_REPO>
+Work dir: <WORK>   (read only; do not write anywhere, not even here)
+Skill dir: <SKILL>
 Read <SKILL>/references/severity-verdict.md (sections "Verifier rubric", "Noise rules").
 For each finding re-read the code at file:line and its callers. Set "score".
 Rule-based findings: confirm the fact only; keep severity; score 100 or drop.
