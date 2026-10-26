@@ -19,10 +19,13 @@ Fields to read with `jq`: `.iid`, `.title`, `.description`,
 `.state` (skip review if `merged` or `closed`, say so), `.draft`.
 Project path for the API: `glab repo view --output json | jq -r .path_with_namespace`.
 
-Check out the head without touching the user's branch:
+Check out the head without touching the user's branch, with hooks disabled
+(`worktree add` runs the `post-checkout` hook, code the reviewed repo
+controls, and a `core.hooksPath` inside the repo is a directory the MR itself
+can change):
 
     git -C "$REPO" fetch origin "$SOURCE_BRANCH"
-    git -C "$REPO" worktree add --detach "$WORK/wt" "$HEAD_SHA"
+    git -C "$REPO" -c core.hooksPath=/dev/null worktree add --detach "$WORK/wt" "$HEAD_SHA"
 
 Then run `collect.sh --repo "$WORK/wt" --head "$HEAD_SHA" --base "${BASE:-origin/$TARGET_BRANCH}" --status-repo "$REPO"`.
 `--status-repo "$REPO"` is required here: the no-artifact baselines must

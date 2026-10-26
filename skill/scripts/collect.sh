@@ -112,8 +112,13 @@ git -C "$STATUS_REPO" stash list > "$OUT/stash-before.txt"
 if [[ "$HEAD" == "WORKTREE" ]]; then MODE=worktree; HEAD_SHA=$(git -C "$REPO" rev-parse HEAD)
 else
   MODE=ref; HEAD_SHA=$(git -C "$REPO" rev-parse "$HEAD")
+  # Everything past the diff (module detection, packages, every tool) reads
+  # the working tree, so a head that is not checked out would be reviewed
+  # as whatever the checkout holds. The baselines above are already taken,
+  # so assert-clean.sh can still verify after this refusal.
   actual_head=$(git -C "$REPO" rev-parse HEAD)
-  [[ "$actual_head" == "$HEAD_SHA" ]] || log "checked-out HEAD $actual_head differs from --head $HEAD_SHA; tools run against the checkout"
+  [[ "$actual_head" == "$HEAD_SHA" ]] ||
+    die "--head $HEAD ($HEAD_SHA) is not checked out in $REPO (HEAD is $actual_head); check it out in a temporary worktree and pass that as --repo"
 fi
 MB=$(merge_base "$REPO" "$BASE" "$HEAD_SHA")
 

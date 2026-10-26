@@ -452,4 +452,13 @@ tp=$(cat "$out/ti/test-packages.txt")
 assert_contains "$tp" "example.com/ti/itest" "a package importing the changed package only from internal tests is tested"
 assert_contains "$tp" "example.com/ti/b" "a package importing the changed package only from external tests is tested"
 
+# --- ref mode with --head not checked out: the working tree holds other code,
+# so collect.sh refuses rather than read and test the checkout as the head ---
+git -C "$ti" checkout -q main
+r=$(bash "$S/collect.sh" --repo "$ti" --base main --head feature/x --out "$out/ti-off" --no-tools 2>&1); rc=$?
+assert_eq "1" "$rc" "collect.sh refuses a --head that is not checked out"
+assert_contains "$r" "not checked out" "the refusal says the head is not checked out"
+assert_file "$out/ti-off/status-before.txt" "the baselines are taken before the refusal, so assert-clean can still verify"
+[[ -e "$out/ti-off/diff.patch" ]] && fail "no diff is written for a refused head" || pass
+
 finish

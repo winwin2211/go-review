@@ -14,11 +14,23 @@ directory (the parent of `references/`).
    with steps 1-6 below so progress is visible.
 4. Decide the mode:
    - No target: `HEAD=WORKTREE`, `BRANCH=$(git rev-parse --abbrev-ref HEAD)`, `TITLE=""`.
-   - Branch name: `HEAD=<branch>`, `BRANCH=<branch>`, `TITLE=""`.
+   - Branch name: `BRANCH=<branch>`, `TITLE=""`,
+     `HEAD=$(git -C "$REPO" rev-parse --verify "<branch>^{commit}")` (if that
+     fails, stop: "no such branch"). When `HEAD` is the commit `$REPO` has
+     checked out and `git -C "$REPO" status --porcelain` prints nothing,
+     `REVIEW_REPO=$REPO`. Otherwise the checkout holds other code (another
+     branch, or uncommitted changes the branch does not contain) and
+     `collect.sh` would refuse it, so check the branch out without touching
+     the user's checkout, with hooks disabled (`worktree add` runs
+     `post-checkout`, which the reviewed repo controls):
+
+         git -C "$REPO" -c core.hooksPath=/dev/null worktree add --detach "$WORK/wt" "$HEAD"
+
+     and set `REVIEW_REPO=$WORK/wt`.
    - MR (`!N`, `N`, or URL): follow `references/gitlab.md` (section "Resolve an MR target").
      Sets `HEAD=<head sha>`, `BRANCH=<source>`, `TITLE=<mr title>`,
      `REVIEW_REPO=$WORK/wt`. If the MR is merged/closed, print that and go to step 6.
-   For non-MR modes `REVIEW_REPO=$REPO`.
+   With no target `REVIEW_REPO=$REPO`.
    In every mode, if the user passed `--base`, that value wins: `BASE=<--base value>`.
    Otherwise: MR mode sets `BASE=origin/<target>`; non-MR modes leave `BASE`
    empty (`collect.sh` resolves it via `resolve_base` and writes the resolved
@@ -32,17 +44,17 @@ Run `scripts/collect.sh` and then `scripts/find-specs.sh` exactly as shown in
 `--repo "$REVIEW_REPO"`. Pass `--no-tools` / `--full-tests`
 / `--spec` / `--base` through: give `collect.sh --base "$BASE"` whenever `BASE`
 is non-empty (omit the flag when it is empty and let `collect.sh` resolve it).
-When `REVIEW_REPO` is a temporary worktree (MR mode), also pass
-`collect.sh --status-repo "$REPO"`, per `references/gitlab.md`, so the
-no-artifact baselines describe the repo step 6 actually checks, not the
-worktree.
+Whenever `REVIEW_REPO` is the temporary worktree `$WORK/wt` (MR mode, and
+branch mode off the checkout), also pass `collect.sh --status-repo "$REPO"`,
+per `references/gitlab.md`, so the no-artifact baselines describe the repo
+step 6 actually checks, not the worktree.
 After `collect.sh` runs, read `BASE=` back out of `$WORK/meta.env` — this is
 now always set, resolved or not — and pass that value as `find-specs.sh --base`
 so the git-log signal always has a base. Read `$WORK/tools/summary.txt` and
 `$WORK/meta.env` and print a one-line progress message with the tool statuses.
 
-Collect project rule files from `$REVIEW_REPO` (not `$REPO`, which in MR
-mode may be checked out on another branch): root `CLAUDE.md`, `CLAUDE.md` in
+Collect project rule files from `$REVIEW_REPO` (not `$REPO`, which may be
+checked out on another branch): root `CLAUDE.md`, `CLAUDE.md` in
 each directory listed in `changed-files.txt` (walk up to root),
 `docs/code-standards/*.md` if present. Store the list in `$WORK/rules.txt`.
 
@@ -122,6 +134,10 @@ If `--comment`:
 bash "$SKILL/scripts/assert-clean.sh" --repo "$REPO" --out "$WORK" [--worktree "$WORK/wt"]
 rm -rf "$WORK"
 ```
+
+Pass `--worktree "$WORK/wt"` whenever step 0.4 created that worktree (MR
+mode, and branch mode off the checkout): the script removes it from `$REPO`
+before the check.
 
 `rm -rf "$WORK"` always runs, even when `assert-clean.sh` exits 2 or 3 — `$WORK` is
 this skill's own scratch directory, not part of the reviewed repo, so removing

@@ -39,6 +39,20 @@ grep -qF 'Not scanned' "$SK/references/workflow.md" && pass || fail "workflow.md
 grep -qF 'cannot read' "$SK/references/tooling.md" && pass || fail "tooling.md explains what an unreadable directory does to the scan"
 grep -qF 'later than the check' "$SK/references/tooling.md" && pass || fail "tooling.md says future mtimes are not counted"
 
+# a worktree is made with repository hooks disabled: `worktree add` runs the
+# post-checkout hook, which is code the reviewed repo controls
+grep 'worktree add' "$SK/references/gitlab.md" | grep -q 'core.hooksPath=/dev/null' && pass || fail "gitlab.md creates the MR worktree with repository hooks disabled"
+
+# branch mode reviews the branch, not whatever the checkout holds
+branch=$(awk '/^   - Branch name:/,/^   - MR/' "$SK/references/workflow.md")
+assert_contains "$branch" "worktree add" "workflow.md checks a branch that is not checked out into a worktree"
+assert_contains "$branch" "core.hooksPath=/dev/null" "the branch worktree is made with repository hooks disabled"
+assert_contains "$branch" "status --porcelain" "a dirty checkout of the branch is also reviewed from a worktree"
+assert_contains "$branch" 'REVIEW_REPO=$WORK/wt' "branch mode then reviews the worktree"
+step1=$(awk '/^## 1\. /,/^## 2\. /' "$SK/references/workflow.md")
+assert_not_contains "$step1" "temporary worktree (MR mode)" "step 1 passes --status-repo for any temporary worktree, not only MR mode"
+grep -qF 'not checked out' "$SK/references/tooling.md" && pass || fail "tooling.md says collect.sh refuses a --head that is not checked out"
+
 # SKILL.md frontmatter
 head -1 "$SK/SKILL.md" | grep -q '^---$' && pass || fail "frontmatter start"
 grep -q '^name: go-review$' "$SK/SKILL.md" && pass || fail "name"
