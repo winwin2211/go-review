@@ -54,6 +54,15 @@ pkill -f "$orphan" 2>/dev/null || true
 [[ "$seen" -gt 0 ]] && pass || fail "the command was seen running before its caller was killed"
 assert_eq "0" "$n" "the command does not outlive a caller killed with SIGKILL"
 
+# --- tests/lib.sh: a tmpdir made inside $(tmpdir), a subshell, is still removed when the test exits ---
+cat > "$out/child-test.sh" <<EOF
+source "$REPO_ROOT/tests/lib.sh"
+d=\$(tmpdir); echo x > "\$d/f"; echo "\$d"
+EOF
+made=$(bash "$out/child-test.sh")
+[[ -n "$made" ]] && pass || fail "the child test printed the tmpdir it made"
+[[ -n "$made" && ! -e "$made" ]] && pass || fail "a tmpdir made by a test is removed when the test exits ($made)"
+
 # --- die/log prefix comes from REVIEW_TOOL, default go-review ---
 r=$( (REVIEW_TOOL=other-review; die "boom") 2>&1 ); assert_eq "other-review: boom" "$r" "die uses REVIEW_TOOL as prefix"
 r=$( (die "boom") 2>&1 ); assert_eq "go-review: boom" "$r" "die prefix defaults to go-review"

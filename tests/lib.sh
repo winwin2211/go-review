@@ -4,7 +4,6 @@ set -uo pipefail
 
 _PASS=0
 _FAIL=0
-_TMPDIRS=()
 
 pass() { _PASS=$((_PASS + 1)); }
 fail() { _FAIL=$((_FAIL + 1)); printf 'FAIL: %s\n' "$1" >&2; }
@@ -36,17 +35,14 @@ assert_exit() { # code cmd...
   if [[ "$want" == "$got" ]]; then pass; else fail "exit code for '$*' (expected $want, got $got)"; fi
 }
 
-tmpdir() {
-  local d
-  d=$(mktemp -d "${TMPDIR:-/tmp}/${REVIEW_TOOL:-go-review}-test.XXXXXX")
-  _TMPDIRS+=("$d")
-  printf '%s\n' "$d"
-}
+# Every tmpdir lives under one root made here, in the test's own shell:
+# tmpdir runs inside $(...), a subshell, so a list it appended to would never
+# reach the EXIT trap. The chmod undoes a test's mode-000 fixture left behind
+# by a failure, which rm alone cannot remove.
+_TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/${REVIEW_TOOL:-go-review}-test.XXXXXX")
+tmpdir() { mktemp -d "$_TEST_ROOT/d.XXXXXX"; }
 
-_cleanup() {
-  local d
-  for d in "${_TMPDIRS[@]:-}"; do [[ -n "$d" && -d "$d" ]] && rm -rf "$d"; done
-}
+_cleanup() { chmod -R u+rwx "$_TEST_ROOT" 2>/dev/null; rm -rf "$_TEST_ROOT"; }
 trap _cleanup EXIT
 
 finish() {
