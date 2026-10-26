@@ -8,7 +8,7 @@
    A `DATA RACE` block or a failing test is a BLOCKER with the tool line as evidence.
 3. Walk the list below against each changed function. Report only what you can
    point to at a `file:line` on a changed line. Pre-existing defects on
-   unchanged lines go in a separate list with `"line"` set and the title
+   unchanged lines go in the same array, with `"line"` set and the title
    prefixed `PRE-EXISTING:`.
 4. Do not report what `tools/lint.txt` already reports unless lint is UNAVAILABLE.
 

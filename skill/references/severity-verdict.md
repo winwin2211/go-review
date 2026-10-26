@@ -41,13 +41,20 @@ MINOR
 
 Score each non-rule finding 0-100 after re-reading the code at `file:line` and its callers:
 
-- 0    Not a defect, pre-existing on unchanged lines, or the code handles it elsewhere.
+- 0    Not a defect, or the code handles it elsewhere.
 - 25   Might be real; could not confirm the path is reachable or the input is possible.
 - 50   Confirmed real but rarely hit in practice, or a nitpick relative to the rest of the change.
 - 75   Confirmed real, reachable, and matters; the change as written is insufficient.
 - 100  Confirmed by direct evidence (tool output, a test, or an unambiguous code path) and will happen in normal operation.
 
 Thresholds: >= 80 report; 60-79 "Needs human judgment"; < 60 drop.
+
+A defect on unchanged lines is still scored on this rubric, never 0 for its
+age: an agent reports one only when the change makes it reachable or worse,
+with the title prefixed `PRE-EXISTING:`. Confirm the defect exists at
+`file:line` and drop the finding if it does not. The orchestrator lists a
+kept one under "Pre-existing" whatever its score, and it never counts toward
+the verdict.
 
 Rule-based findings are not scored. The verifier only checks the fact
 (spec really absent, section really missing, test really absent, tool really

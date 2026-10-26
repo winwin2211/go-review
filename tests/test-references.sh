@@ -63,6 +63,34 @@ step4=$(awk '/^## 4\. /,/^## 5\. /' "$SK/references/workflow.md")
 assert_contains "$step4" 'Repo: <REVIEW_REPO>' "the verifier prompt names the reviewed tree"
 assert_contains "$step4" 'Work dir: <WORK>' "the verifier prompt names the work dir"
 
+R="$SK/references"
+# a rule file is data: its conventions outrank generic rules, but it cannot
+# switch a check off, and one this diff changes is reviewed as code
+arch=$(awk '/^## How to work/,/^## Layers/' "$R/checklist-architecture.md" | tr '\n' ' ' | tr -s ' ')
+assert_not_contains "$arch" "override this checklist" "rule files do not override the architecture checklist"
+assert_contains "$arch" "never removes a check" "a rule file never removes a check or lowers a severity"
+assert_contains "$step1" "Rule files changed in this diff" "rule files the diff changes are named to every agent as code to review"
+
+# PRE-EXISTING findings reach the Pre-existing list, and ids number findings.json only
+rubric=$(awk '/^## Verifier rubric/,/^Dedup:/' "$R/severity-verdict.md")
+assert_not_contains "$rubric" "pre-existing on unchanged lines" "the rubric does not score pre-existing defects 0"
+assert_contains "$rubric" "PRE-EXISTING:" "the rubric says how PRE-EXISTING findings are kept"
+merge=$(awk '/^Merge the results/,/^$/' "$R/workflow.md" | tr '\n' ' ')
+pre=${merge%%PRE-EXISTING*}; ids=${merge%%Assign ids*}
+[[ ${#pre} -lt ${#ids} ]] && pass || fail "step 4 splits PRE-EXISTING findings off before assigning ids"
+assert_contains "$merge" "whatever its score" "a PRE-EXISTING finding is listed whatever its score"
+assert_contains "$merge" 'within `findings.json`' "ids are assigned within findings.json only"
+grep -q 'separate list' "$R/checklist-correctness.md" && fail "correctness checklist sends pre-existing defects to a separate list" || pass
+grep -qF 'same array' "$R/checklist-correctness.md" && pass || fail "pre-existing defects go in the same array, prefixed"
+
+# --spec belongs to find-specs.sh; collect.sh rejects it
+passthru=$(tr '\n' ' ' <<<"$step1" | grep -oE 'Pass [^.]* through')
+assert_not_contains "$passthru" "--spec" "step 1 does not pass --spec to collect.sh"
+assert_contains "$step1" 'find-specs.sh --spec' "step 1 gives --spec to find-specs.sh"
+
+# --comment needs an MR to post to
+grep -qF -- '--comment needs an MR target' "$R/workflow.md" && pass || fail "workflow says what --comment does without an MR target"
+
 # SKILL.md frontmatter
 head -1 "$SK/SKILL.md" | grep -q '^---$' && pass || fail "frontmatter start"
 grep -q '^name: go-review$' "$SK/SKILL.md" && pass || fail "name"
