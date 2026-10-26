@@ -63,9 +63,17 @@ made=$(bash "$out/child-test.sh")
 [[ -n "$made" ]] && pass || fail "the child test printed the tmpdir it made"
 [[ -n "$made" && ! -e "$made" ]] && pass || fail "a tmpdir made by a test is removed when the test exits ($made)"
 
-# --- die/log prefix comes from REVIEW_TOOL, default go-review ---
-r=$( (REVIEW_TOOL=other-review; die "boom") 2>&1 ); assert_eq "other-review: boom" "$r" "die uses REVIEW_TOOL as prefix"
-r=$( (die "boom") 2>&1 ); assert_eq "go-review: boom" "$r" "die prefix defaults to go-review"
+# --- die/log prefix is the skill's name from its SKILL.md, never an inherited REVIEW_TOOL ---
+r=$( (die "boom") 2>&1 ); assert_eq "go-review: boom" "$r" "die prefix is the name in SKILL.md"
+r=$(REVIEW_TOOL=nodejs-review bash -c "source '$REPO_ROOT/skill/scripts/lib.sh'; die boom" 2>&1)
+assert_eq "go-review: boom" "$r" "an inherited REVIEW_TOOL (a sibling skill's) does not change the prefix"
+probe=$(tmpdir); mkdir -p "$probe/skill/scripts"; cp "$REPO_ROOT/skill/scripts/lib.sh" "$probe/skill/scripts/"
+printf -- '---\nname: probe-review\ndescription: x\n---\nname: not-this\n' > "$probe/skill/SKILL.md"
+r=$(bash -c "source '$probe/skill/scripts/lib.sh'; die boom" 2>&1)
+assert_eq "probe-review: boom" "$r" "the prefix is read from the frontmatter of the SKILL.md beside scripts/"
+rm "$probe/skill/SKILL.md"
+r=$(bash -c "set -euo pipefail; source '$probe/skill/scripts/lib.sh'; die boom" 2>&1)
+assert_eq "review: boom" "$r" "without a SKILL.md the prefix is review, and sourcing still succeeds under set -e"
 
 # --- assert_outside: nonexistent multi-level paths must still resolve correctly ---
 root=$(tmpdir)

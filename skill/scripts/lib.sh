@@ -3,8 +3,13 @@
 #
 # This file is shared byte-for-byte with sibling review skills; anything that
 # differs between them goes through REVIEW_TOOL (log prefix, MR marker, test
-# tmpdir prefix), never through an edit.
-REVIEW_TOOL=${REVIEW_TOOL:-go-review}
+# tmpdir prefix), never through an edit. REVIEW_TOOL is the name in the
+# frontmatter of the SKILL.md beside scripts/, never the environment's: a
+# value exported for one skill would otherwise put its name on the other's MR
+# note, and its own already-posted check would then match that note and skip.
+REVIEW_TOOL=$(awk 'NR > 1 && /^---$/ { exit } sub(/^name:[ \t]*/, "") { print; exit }' \
+  "$(dirname "${BASH_SOURCE[0]}")/../SKILL.md" 2>/dev/null || true)
+REVIEW_TOOL=${REVIEW_TOOL:-review}
 
 die() { printf '%s: %s\n' "$REVIEW_TOOL" "$*" >&2; exit 1; }
 log() { printf '%s: %s\n' "$REVIEW_TOOL" "$*" >&2; }

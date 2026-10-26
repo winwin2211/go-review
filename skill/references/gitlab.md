@@ -47,8 +47,8 @@ be posted and receiving an explicit yes.
       --findings "$WORK/findings.json" --summary "$WORK/summary.md" [--dry-run]
 
 Behavior: one summary note carrying the marker `<!-- go-review:<sha> -->`
-(the prefix is `REVIEW_TOOL`, default `go-review`, so a sibling skill's
-notes on the same MR never count as ours),
+(the prefix is the `name` in this skill's `SKILL.md`, never an inherited
+`REVIEW_TOOL`, so a sibling skill's notes on the same MR never count as ours),
 then one inline discussion per finding whose file is in the MR diff and whose
 `line` is a usable (> 0) anchor. Findings outside the diff, and in-diff
 findings with no such line, are folded into the summary. A rerun on the same

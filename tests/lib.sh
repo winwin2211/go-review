@@ -39,7 +39,7 @@ assert_exit() { # code cmd...
 # tmpdir runs inside $(...), a subshell, so a list it appended to would never
 # reach the EXIT trap. The chmod undoes a test's mode-000 fixture left behind
 # by a failure, which rm alone cannot remove.
-_TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/${REVIEW_TOOL:-go-review}-test.XXXXXX")
+_TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/$(source "$(dirname "${BASH_SOURCE[0]}")/../skill/scripts/lib.sh" && printf %s "$REVIEW_TOOL")-test.XXXXXX")
 tmpdir() { mktemp -d "$_TEST_ROOT/d.XXXXXX"; }
 
 _cleanup() { chmod -R u+rwx "$_TEST_ROOT" 2>/dev/null; rm -rf "$_TEST_ROOT"; }
