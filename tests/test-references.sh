@@ -53,6 +53,10 @@ step1=$(awk '/^## 1\. /,/^## 2\. /' "$SK/references/workflow.md")
 assert_not_contains "$step1" "temporary worktree (MR mode)" "step 1 passes --status-repo for any temporary worktree, not only MR mode"
 grep -qF 'not checked out' "$SK/references/tooling.md" && pass || fail "tooling.md says collect.sh refuses a --head that is not checked out"
 
+# dedup merges one defect reported twice, never two defects that share a line
+grep -q 'one fix removes both' "$SK/references/severity-verdict.md" && pass || fail "dedup merges only findings with one root cause"
+grep -q 'same file and line' "$SK/references/severity-verdict.md" && fail "dedup still merges any two findings on one line" || pass
+
 # SKILL.md frontmatter
 head -1 "$SK/SKILL.md" | grep -q '^---$' && pass || fail "frontmatter start"
 grep -q '^name: go-review$' "$SK/SKILL.md" && pass || fail "name"

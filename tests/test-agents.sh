@@ -17,4 +17,6 @@ for a in correctness security architecture performance sdd-tdd verifier; do
     grep -q 'Verifier rubric' "$f" && pass || fail "verifier reads rubric"
   fi
 done
+grep -q 'one fix removes both' "$A/go-review-verifier.md" && pass || fail "verifier merges only findings with one root cause"
+grep -q 'same file and line' "$A/go-review-verifier.md" && fail "verifier still merges any two findings on one line" || pass
 finish

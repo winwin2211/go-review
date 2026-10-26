@@ -27,8 +27,15 @@ the ones a senior Go engineer would defend in front of the author.
   file really is absent or lacks the section, the test really is missing, the
   tool really failed). If the fact holds, keep `severity` and set `score` to
   100; otherwise drop the finding.
-- Merge duplicates (same file and line, or the same defect worded twice):
-  keep the higher severity and the better evidence, one entry.
+- Merge duplicates only when two findings name the same defect with one
+  root cause, so one fix removes both (two agents reporting the same ignored
+  error; a test `FAIL` row and an agent finding that explains why that test
+  fails): keep the higher severity and the better evidence, one entry.
+  Never merge two rule-based findings that cite different rows or rules
+  (each failing package, vulnerability and SDD rule is its own finding, even
+  on the same line), and keep different defects separate even on
+  neighboring lines or in one function. The "Dedup" paragraph of
+  `severity-verdict.md` gives examples.
 - Never add new findings. Never change `file` or `line` except to correct an
   off-by-a-few line number after reading the file.
 

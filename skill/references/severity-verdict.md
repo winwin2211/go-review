@@ -54,8 +54,17 @@ Rule-based findings are not scored. The verifier only checks the fact
 failed). If the fact is wrong, drop the finding; otherwise keep the severity
 from the rule table and set score to 100.
 
-Dedup: two findings on the same file and line (or the same defect described
-twice) merge into one, keeping the higher severity and the better evidence.
+Dedup: merge two findings only when they name the same defect with one
+root cause, so one fix removes both: two agents reporting the same ignored
+error, or a test `FAIL` row and an agent finding that explains why that test
+fails (the data race the race detector reports). Keep the higher severity
+and the better evidence. Never merge two rule-based findings that cite
+different rows or rules: each failing package, each vulnerability (OSV id)
+and each SDD rule is its own finding, even on the same line. Different
+defects stay separate even on neighboring lines or in one function: a
+`//nolint` comment and the issue it hides, an ignored error and the missing
+test for it, an injectable query and the missing authorization check in the
+same handler.
 
 ## Verdict
 
