@@ -74,6 +74,16 @@ bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_
 r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_nc" --worktree "$out_nc/never-created")
 assert_eq "No artifacts left: verified" "$r" "MINOR: --worktree for a path never created is a no-op, not an error"
 
+# a run whose collect died before taking any baseline (a bad budget, a bad
+# argument) still has its worktree removed, then exits 1 for the baselines
+out_nb=$(tmpdir); wt_nb="$out_nb/wt"
+git -C "$fx/clean" worktree add -q --detach "$wt_nb" main
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_nb" --worktree "$wt_nb" 2>&1); rc=$?
+assert_eq "1" "$rc" "no baselines: assert-clean exits 1"
+assert_contains "$r" "missing baseline files" "no baselines: the reason is named"
+[[ -d "$wt_nb" ]] && fail "no baselines: the worktree is still removed" || pass
+n=$(git -C "$fx/clean" worktree list | grep -c "$wt_nb" || true); assert_eq "0" "$n" "no baselines: the worktree is no longer registered in the repo"
+
 # --- writes that leave `git status` unchanged must still be caught ---
 # (a) a tracked file the user had already modified is rewritten during the run
 echo '// user wip' >> "$fx/clean/cmd/api/main.go"

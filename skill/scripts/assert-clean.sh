@@ -19,8 +19,6 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "$REPO" && -n "$OUT" ]] || die "$usage"
 git -C "$REPO" rev-parse --show-toplevel >/dev/null 2>&1 || die "not a git working tree: $REPO"
-[[ -f "$OUT/status-before.txt" && -f "$OUT/stash-before.txt" && -f "$OUT/status-ignored-before.txt" && -f "$OUT/mtime-marker" ]] ||
-  die "missing baseline files in $OUT (expected status-before.txt, stash-before.txt, status-ignored-before.txt and mtime-marker)"
 
 if [[ -n "$WT" ]]; then
   # $WT is composed by the orchestrator (in practice, an LLM) and must never
@@ -49,6 +47,11 @@ if [[ -n "$WT" ]]; then
     git -C "$REPO" worktree prune
   fi
 fi
+
+# Checked after the worktree is gone: a collect that died before taking the
+# baselines must not also leave the worktree registered in the repo.
+[[ -f "$OUT/status-before.txt" && -f "$OUT/stash-before.txt" && -f "$OUT/status-ignored-before.txt" && -f "$OUT/mtime-marker" ]] ||
+  die "missing baseline files in $OUT (expected status-before.txt, stash-before.txt, status-ignored-before.txt and mtime-marker)"
 
 rc=0
 diff "$OUT/status-before.txt" <(git -C "$REPO" status --porcelain) > "$OUT/status-diff.txt" || rc=2
