@@ -104,8 +104,12 @@ basenames, default none) are pruned from that scan along with `.git`;
 sibling skills use it for tool-cache directories such as `node_modules`, and
 go-review leaves it empty. Outside the guarantee: `.git` internal writes
 made by `git fetch` or worktree add/remove (updated remote-tracking refs,
-packed-refs, reflog entries), and a write that restores the file's previous
-mtime. Anything else that writes inside the repo while the review runs is
+packed-refs, reflog entries), a write that restores the file's previous
+mtime, and a file whose mtime is later than the check itself (a copy with a
+skewed clock, an archive's timestamps), which would otherwise be listed on
+every run. A directory the scan cannot read (another user's, mode 000) is
+named under `Not scanned`; with nothing else found it makes the script exit 1,
+since the check is incomplete. Anything else that writes inside the repo while the review runs is
 listed too: the user's editor, a service logging into the repo, an IDE. When
 `git status` is otherwise unchanged the script cannot tell those writes from
 a test's, so it exits 3 instead of 2 and its banner says who may have written

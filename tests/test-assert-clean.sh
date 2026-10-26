@@ -49,19 +49,20 @@ rm "$fx/clean/ignored-artifact.txt"
 
 # C5: never touch a --worktree that is not both outside the repo and a
 # worktree git actually knows about, even when it happens to be the repo
-# itself (a compromised or buggy orchestrator could compose exactly this).
-r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$fx/clean" 2>&1 || true)
-rc=0
-bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$fx/clean" >/dev/null 2>&1 || rc=$?
-[[ "$rc" -ne 0 ]] && pass || fail "C5: --worktree pointing at the repo itself must not exit 0"
-assert_not_contains "$r" "verified" "C5: --worktree pointing at the repo itself must not print verified"
+# itself (a compromised or buggy orchestrator could compose exactly this). A
+# fresh baseline, so that only the guard can make these calls fail.
+out_c5=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_c5" --no-tools
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_c5" --worktree "$fx/clean" 2>&1); rc=$?
+assert_eq "1" "$rc" "C5: --worktree pointing at the repo itself exits 1"
+assert_contains "$r" "refusing to write inside the reviewed repo" "C5: --worktree pointing at the repo itself is refused by name"
 [[ -d "$fx/clean/.git" ]] && pass || fail "C5: the repo itself must survive a --worktree=repo call"
 
 not_registered="$out/not-a-registered-worktree"
 mkdir -p "$not_registered"
-rc=0
-bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out" --worktree "$not_registered" >/dev/null 2>&1 || rc=$?
-[[ "$rc" -ne 0 ]] && pass || fail "C5: --worktree pointing at an unregistered directory must not exit 0"
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_c5" --worktree "$not_registered" 2>&1); rc=$?
+assert_eq "1" "$rc" "C5: --worktree pointing at an unregistered directory exits 1"
+assert_contains "$r" "refusing to remove unregistered worktree path" "C5: an unregistered --worktree is refused by name"
 [[ -d "$not_registered" ]] && pass || fail "C5: an unregistered --worktree directory must not be removed"
 
 # MINOR: a --worktree path that was never created (an MR run that bailed
@@ -146,6 +147,44 @@ assert_contains "$r" "stray-f.txt" "(f) the change git status proves is listed"
 assert_contains "$r" "most likely cause" "(f) a proven change keeps the test-suite banner"
 assert_contains "$r" "cannot tell who wrote" "(f) the log write is labelled as unattributed"
 rm -f "$fx/clean/stray-f.txt"; rm -rf "$fx/clean/logs" "$fx/clean/.idea"
+
+# (g) a file whose mtime lies in the future (a copy from a skewed clock, an
+# archive extracted with its timestamps) is newer than the start marker on
+# every run although nothing touched it: only writes up to the check count
+echo '/tmpfuture/' >> "$fx/clean/.gitignore"
+git -C "$fx/clean" add .gitignore && git -C "$fx/clean" commit -q -m "ignore tmpfuture"
+mkdir -p "$fx/clean/tmpfuture"; echo x > "$fx/clean/tmpfuture/f.txt"; touch -t 203501010000 "$fx/clean/tmpfuture/f.txt"
+out_g=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_g" --no-tools
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_g" 2>&1 || true)
+assert_eq "No artifacts left: verified" "$r" "(g) a future-dated file nothing touched is not reported"
+echo y > "$fx/clean/tmpfuture/f.txt"
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_g" 2>&1 || true)
+assert_contains "$r" "tmpfuture/f.txt" "(g) the same file rewritten during the run is reported"
+rm -rf "$fx/clean/tmpfuture"
+
+# (h) a directory the scan cannot read for the whole run (mode 000, another
+# user's) never hides the rest: a change git status proves still exits 2, and
+# on its own the unreadable directory is named as why the check could not
+# finish (exit 1). It is unreadable before the baseline: git drops an
+# unreadable directory from the ignored status, so turning it unreadable
+# mid-run is itself a change git proves.
+echo '/locked/' >> "$fx/clean/.gitignore"
+git -C "$fx/clean" add .gitignore && git -C "$fx/clean" commit -q -m "ignore locked"
+mkdir -p "$fx/clean/locked"; echo x > "$fx/clean/locked/a.txt"
+chmod 000 "$fx/clean/locked"
+out_h=$(tmpdir)
+bash "$S/collect.sh" --repo "$fx/clean" --base main --head WORKTREE --out "$out_h" --no-tools 2>/dev/null
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_h" 2>&1); rc=$?
+assert_eq "1" "$rc" "(h) an unreadable directory alone exits 1"
+assert_contains "$r" "could not scan" "(h) the exit-1 reason names the incomplete scan"
+assert_contains "$r" "locked" "(h) the exit-1 reason names the unreadable directory"
+touch "$fx/clean/stray-h.txt"
+r=$(bash "$S/assert-clean.sh" --repo "$fx/clean" --out "$out_h" 2>&1); rc=$?
+assert_eq "2" "$rc" "(h) a proven change is still reported beside an unreadable directory"
+assert_contains "$r" "stray-h.txt" "(h) the proven change is listed"
+assert_contains "$r" "locked" "(h) the unreadable directory is named beside it"
+chmod 755 "$fx/clean/locked"; rm -rf "$fx/clean/locked" "$fx/clean/stray-h.txt"
 
 # and a run that writes nothing is still verified after all of the above
 out_ok=$(tmpdir)

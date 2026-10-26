@@ -33,6 +33,11 @@ exit3=$(awk '/assert-clean.sh` exits 3/,/^$/' "$SK/references/workflow.md")
 assert_contains "$exit3" "WRITTEN DURING THE RUN" "workflow.md gives assert-clean exit 3 its own heading"
 assert_contains "$exit3" "never tell the user to remove them" "workflow.md never has the user remove unattributed writes"
 grep -qF 'exits 3 instead of 2' "$SK/references/tooling.md" && pass || fail "tooling.md explains when assert-clean exits 3"
+exit1=$(awk '/assert-clean.sh` exits 1/,/^$/' "$SK/references/workflow.md")
+assert_contains "$exit1" "could not read" "workflow.md names an unreadable directory as an assert-clean exit 1"
+grep -qF 'Not scanned' "$SK/references/workflow.md" && pass || fail "workflow.md says the Not scanned lines are not files to remove"
+grep -qF 'cannot read' "$SK/references/tooling.md" && pass || fail "tooling.md explains what an unreadable directory does to the scan"
+grep -qF 'later than the check' "$SK/references/tooling.md" && pass || fail "tooling.md says future mtimes are not counted"
 
 # SKILL.md frontmatter
 head -1 "$SK/SKILL.md" | grep -q '^---$' && pass || fail "frontmatter start"

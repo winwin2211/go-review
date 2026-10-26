@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Verify the reviewed repo is unchanged after a go-review run.
 #
-# Exit 0: unchanged (prints the verified line). 1: the check could not run.
-# 2: git status, the ignored status or the stash list changed. 3: only the
-# mtime scan found writes, which git cannot attribute to anyone.
+# Exit 0: unchanged (prints the verified line). 1: the check could not run,
+# or could not read every directory and found nothing else. 2: git status,
+# the ignored status or the stash list changed. 3: only the mtime scan found
+# writes, which git cannot attribute to anyone.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 usage="usage: assert-clean.sh --repo R --out O [--worktree W]"
@@ -62,14 +63,29 @@ diff "$OUT/status-ignored-before.txt" <(git -C "$REPO" status --porcelain --igno
 # node_modules there. Who wrote these files is unknown: the repo's tests, the
 # user's editor, or a process running from the repo (a service's log, an IDE's
 # settings) all look the same. Alone they exit 3, never 2, so they reach the
-# user as writes to check, not as artifacts to remove.
+# user as writes to check, not as artifacts to remove. Only writes up to now
+# count, so a file whose mtime lies in the future (a skewed copy, an archive's
+# timestamps) is not reported on every run. A directory find cannot read
+# makes the scan incomplete; a file that vanished during it does not.
 repo_real=$(cd "$REPO" && pwd -P)
 prune=(-name .git)
 IFS=: read -r -a extra <<<"${ASSERT_CLEAN_PRUNE:-}"
 for d in "${extra[@]:-}"; do [[ -n "$d" ]] && prune+=(-o -name "$d"); done
-find "$repo_real" \( "${prune[@]}" \) -prune -o \( -type f -o -type l \) -newer "$OUT/mtime-marker" -print 2>/dev/null |
+touch "$OUT/mtime-now"
+{ find "$repo_real" \( "${prune[@]}" \) -prune -o \( -type f -o -type l \) \
+    -newer "$OUT/mtime-marker" ! -newer "$OUT/mtime-now" -print 2>"$OUT/mtime-find-errors.txt" || true; } |
   awk -v p="$repo_real/" 'index($0, p) == 1 { print substr($0, length(p) + 1) }' | sort > "$OUT/mtime-diff.txt"
-if [[ $rc -eq 0 && ! -s "$OUT/mtime-diff.txt" ]]; then echo "No artifacts left: verified"; exit 0; fi
+grep -v 'No such file or directory' "$OUT/mtime-find-errors.txt" > "$OUT/mtime-unscanned.txt" || true
+unscanned() {
+  [[ -s "$OUT/mtime-unscanned.txt" ]] || return 0
+  echo "Not scanned for writes (find could not read these):"
+  cat "$OUT/mtime-unscanned.txt"
+}
+if [[ $rc -eq 0 && ! -s "$OUT/mtime-diff.txt" ]]; then
+  [[ -s "$OUT/mtime-unscanned.txt" ]] &&
+    die "could not scan every directory for files written during the run, so the check is incomplete: $(head -3 "$OUT/mtime-unscanned.txt" | tr '\n' ' ')"
+  echo "No artifacts left: verified"; exit 0
+fi
 writers="the repo's own tests, your editor, or a process running from the repo (logs, IDE settings, local data)"
 {
   if [[ $rc -eq 2 ]]; then
@@ -85,6 +101,7 @@ writers="the repo's own tests, your editor, or a process running from the repo (
     echo "git status is unchanged, so this check cannot tell who wrote them: $writers. Check them before removing anything:"
     cat "$OUT/mtime-diff.txt"
   fi
+  unscanned
 } >&2
 [[ $rc -eq 2 ]] && exit 2
 exit 3
